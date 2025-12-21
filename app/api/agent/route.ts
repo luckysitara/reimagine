@@ -85,24 +85,29 @@ export async function POST(request: Request) {
 
     if (!apiKey) {
       console.error("[v0] GOOGLE_GENERATIVE_AI_API_KEY is not set")
-      console.error(
-        "[v0] Available env vars:",
-        Object.keys(process.env).filter((key) => key.includes("GOOGLE")),
-      )
       return Response.json(
         {
-          error: "AI service not configured. The GOOGLE_GENERATIVE_AI_API_KEY environment variable is missing.",
-          hint: "Add GOOGLE_GENERATIVE_AI_API_KEY to your environment variables",
+          error:
+            "AI service is not configured properly. Please ensure GOOGLE_GENERATIVE_AI_API_KEY is set in your environment variables.",
         },
         { status: 500 },
       )
     }
 
-    console.log("[v0] API key found, initializing Google AI client...")
+    if (apiKey.includes("your_") || apiKey.includes("YOUR_")) {
+      console.error("[v0] GOOGLE_GENERATIVE_AI_API_KEY appears to be a placeholder")
+      return Response.json(
+        {
+          error:
+            "AI service is not configured with a valid API key. Please update GOOGLE_GENERATIVE_AI_API_KEY with your actual Gemini API key.",
+        },
+        { status: 500 },
+      )
+    }
+
+    console.log("[v0] Initializing Google AI client with API key...")
 
     const genAI = new GoogleGenerativeAI(apiKey)
-
-    console.log("[v0] GoogleGenerativeAI client initialized")
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash-exp",
@@ -115,20 +120,18 @@ export async function POST(request: Request) {
       },
     })
 
-    console.log("[v0] Model configured")
-
     const userPrompt = walletAddress ? `User wallet: ${walletAddress}\n\nUser message: ${message}` : message
 
-    console.log("[v0] Sending request to Gemini...")
+    console.log("[v0] Sending request to Gemini API...")
 
     const result = (await Promise.race([
       model.generateContent(userPrompt),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timeout")), 30000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("AI request timeout after 45 seconds")), 45000)),
     ])) as any
 
     const response = result.response
 
-    console.log("[v0] Gemini response received")
+    console.log("[v0] Gemini response received successfully")
 
     // Process function calls if any
     const toolResults: Array<{ tool: string; result: unknown; success: boolean }> = []
@@ -137,10 +140,10 @@ export async function POST(request: Request) {
     const functionCalls = response.functionCalls()
 
     if (functionCalls && functionCalls.length > 0) {
-      console.log("[v0] Function calls detected:", functionCalls)
+      console.log("[v0] Processing", functionCalls.length, "function calls")
 
       for (const functionCall of functionCalls) {
-        console.log("[v0] Processing function call:", functionCall.name, functionCall.args)
+        console.log("[v0] Executing tool:", functionCall.name)
 
         try {
           switch (functionCall.name) {
@@ -204,7 +207,7 @@ export async function POST(request: Request) {
               })
           }
         } catch (error) {
-          console.error(`[v0] Tool ${functionCall.name} error:`, error)
+          console.error(`[v0] Tool ${functionCall.name} failed:`, error)
           toolResults.push({
             tool: functionCall.name,
             success: false,
@@ -235,18 +238,40 @@ export async function POST(request: Request) {
     console.error("[v0] Agent API error:", error)
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    const errorStack = error instanceof Error ? error.stack : ""
 
-    console.error("[v0] Error details:", {
-      message: errorMessage,
-      stack: errorStack,
-      type: error?.constructor?.name,
-    })
+    if (errorMessage.includes("API key")) {
+      return Response.json(
+        {
+          error: "Invalid API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration.",
+          details: errorMessage,
+        },
+        { status: 401 },
+      )
+    }
+
+    if (errorMessage.includes("timeout")) {
+      return Response.json(
+        {
+          error: "The AI service is taking too long to respond. Please try again.",
+          details: errorMessage,
+        },
+        { status: 504 },
+      )
+    }
+
+    if (errorMessage.includes("quota") || errorMessage.includes("rate limit")) {
+      return Response.json(
+        {
+          error: "API rate limit exceeded. Please try again in a moment.",
+          details: errorMessage,
+        },
+        { status: 429 },
+      )
+    }
 
     return Response.json(
       {
-        error:
-          "I'm having trouble processing your request right now. Please check that your API key is valid and try again.",
+        error: "I'm having trouble processing your request right now. Please try again.",
         details: errorMessage,
       },
       { status: 500 },

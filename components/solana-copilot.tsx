@@ -54,7 +54,7 @@ export function SolanaCopilot() {
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000)
+      const timeoutId = setTimeout(() => controller.abort(), 45000)
 
       const response = await fetch("/api/agent", {
         method: "POST",
@@ -96,8 +96,11 @@ export function SolanaCopilot() {
       if (error instanceof Error) {
         if (error.name === "AbortError") {
           errorMessage += "The request took too long. Please try again."
-        } else if (error.message.includes("API key")) {
-          errorMessage += "AI service not configured properly. Please check environment variables."
+        } else if (error.message.includes("API key") || error.message.includes("not configured")) {
+          errorMessage +=
+            "AI service not configured properly. Please check that GOOGLE_GENERATIVE_AI_API_KEY is set in environment variables."
+        } else if (error.message.includes("network") || error.message.includes("fetch")) {
+          errorMessage += "Network error. Please check your connection and try again."
         } else {
           errorMessage += error.message
         }

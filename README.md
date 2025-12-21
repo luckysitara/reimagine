@@ -301,6 +301,7 @@ cp .env.example .env.local
 
 # Add your API keys to .env.local
 # NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+# HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 # GOOGLE_GENERATIVE_AI_API_KEY=YOUR_KEY
 # JUPITER_API_KEY=YOUR_KEY
 
@@ -342,22 +343,23 @@ Create a `.env.local` file in the root directory:
 # Solana RPC Configuration
 # ============================================
 
-# Helius RPC URL (Required)
+# NEXT_PUBLIC_HELIUS_RPC_URL (Required for client-side wallet operations)
 # Get your API key at: https://dev.helius.xyz/
 # Free tier: 100k credits/day
 NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=your_api_key_here
 
+# HELIUS_RPC_URL (Required for server-side operations - keeps API key secure)
+# Use the same Helius API key as above
+HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=your_api_key_here
+
 # Network Selection (mainnet-beta or devnet)
 NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
-
-# Fallback RPC (Optional)
-NEXT_PUBLIC_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 
 # ============================================
 # AI Configuration
 # ============================================
 
-# Google Gemini API Key (Required for AI Copilot)
+# GOOGLE_GENERATIVE_AI_API_KEY (Required for AI Copilot)
 # Get your API key at: https://ai.google.dev/
 # Free tier: 60 requests/minute
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
@@ -386,7 +388,11 @@ NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
 2. Sign up for a free account
 3. Create a new project
 4. Copy your API key
-5. Add to `.env.local`: `NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+5. Add to `.env.local`:
+   - `NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+   - `HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+
+**Note**: You need both environment variables - `NEXT_PUBLIC_HELIUS_RPC_URL` for client-side wallet operations and `HELIUS_RPC_URL` for secure server-side operations.
 
 **Free Tier**: 100,000 credits/day (sufficient for testing and development)
 

@@ -15,10 +15,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Wallet address required" }, { status: 400 })
     }
 
-    const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL
-    if (!rpcUrl) {
-      return NextResponse.json({ error: "RPC URL not configured" }, { status: 500 })
-    }
+    const rpcUrl =
+      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
 
     const connection = new Connection(rpcUrl, "confirmed")
     const payer = new PublicKey(walletAddress)

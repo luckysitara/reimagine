@@ -6,13 +6,14 @@ import { useState } from "react"
 import { Zap, Loader2, CheckCircle2, ExternalLink } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
-import { Connection, Transaction } from "@solana/web3.js"
+import { Transaction } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { useConnection } from "@solana/wallet-adapter-react"
 
 export function TokenStudioPanel() {
   const { publicKey, signTransaction } = useWallet()
@@ -20,6 +21,7 @@ export function TokenStudioPanel() {
   const { toast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
   const [createdToken, setCreatedToken] = useState<{ mintAddress: string; signature: string } | null>(null)
+  const { connection } = useConnection()
 
   const [formData, setFormData] = useState({
     name: "",
@@ -76,13 +78,6 @@ export function TokenStudioPanel() {
       console.log("[v0] Signing transaction...")
       const signedTransaction = await signTransaction(transaction)
 
-      // Send transaction
-      const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL
-      if (!rpcUrl) {
-        throw new Error("RPC URL not configured")
-      }
-
-      const connection = new Connection(rpcUrl, "confirmed")
       console.log("[v0] Sending transaction...")
 
       const signature = await connection.sendRawTransaction(signedTransaction.serialize())

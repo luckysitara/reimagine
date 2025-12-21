@@ -1,6 +1,9 @@
 import { Connection, PublicKey } from "@solana/web3.js"
 
-const HELIUS_RPC_URL = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+const RPC_ENDPOINT =
+  typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+    : process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
 
 export interface TokenBalance {
   mint: string
@@ -23,7 +26,7 @@ export interface PortfolioData {
 
 export async function getTokenBalances(walletAddress: string): Promise<TokenBalance[]> {
   try {
-    const connection = new Connection(HELIUS_RPC_URL)
+    const connection = new Connection(RPC_ENDPOINT)
     const publicKey = new PublicKey(walletAddress)
 
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
@@ -84,7 +87,7 @@ export async function enrichTokenData(balances: TokenBalance[]): Promise<TokenBa
 
 export async function getPortfolioValue(walletAddress: string): Promise<PortfolioData> {
   try {
-    const connection = new Connection(HELIUS_RPC_URL)
+    const connection = new Connection(RPC_ENDPOINT)
     const publicKey = new PublicKey(walletAddress)
 
     // Get SOL balance

@@ -128,13 +128,11 @@ export async function getJupiterQuote(
 ): Promise<JupiterQuote> {
   try {
     const url =
-      `${JUPITER_QUOTE_API}/quote?` +
+      `/api/jupiter/quote?` +
       `inputMint=${inputMint}&` +
       `outputMint=${outputMint}&` +
       `amount=${amount}&` +
-      `slippageBps=${slippageBps}&` +
-      `onlyDirectRoutes=false&` +
-      `asLegacyTransaction=false`
+      `slippageBps=${slippageBps}`
 
     console.log("[v0] Fetching Jupiter quote:", url)
 
@@ -155,7 +153,7 @@ export async function getJupiterQuote(
 
 export async function getJupiterSwapTransaction(quoteResponse: JupiterQuote, userPublicKey: string): Promise<string> {
   try {
-    const response = await fetch(`${JUPITER_QUOTE_API}/swap`, {
+    const response = await fetch(`/api/jupiter/swap`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -163,9 +161,6 @@ export async function getJupiterSwapTransaction(quoteResponse: JupiterQuote, use
       body: JSON.stringify({
         quoteResponse,
         userPublicKey,
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto",
       }),
     })
 
