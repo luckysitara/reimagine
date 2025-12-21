@@ -1,4 +1,4 @@
-import { getJupiterQuote, getJupiterSwapTransaction } from "../services/jupiter"
+import { getJupiterQuote } from "../services/jupiter"
 import { getJupiterTokenList } from "../services/jupiter"
 
 export interface SwapParams {
@@ -19,6 +19,7 @@ export interface SwapPreparation {
   transaction: string
   estimatedOutput: number
   priceImpact: string
+  requestId: string
 }
 
 export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> {
@@ -42,25 +43,28 @@ export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> 
   // Convert amount to lamports based on decimals
   const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputTokenData.decimals))
 
-  // Get quote
-  const quote = await getJupiterQuote(inputTokenData.address, outputTokenData.address, amountInSmallestUnit)
-
-  // Get swap transaction
-  const transaction = await getJupiterSwapTransaction(quote, walletAddress)
+  const order = await getJupiterQuote(
+    inputTokenData.address,
+    outputTokenData.address,
+    amountInSmallestUnit,
+    100, // 1% slippage
+    walletAddress,
+  )
 
   // Calculate estimated output
-  const estimatedOutput = Number.parseInt(quote.outAmount) / Math.pow(10, outputTokenData.decimals)
+  const estimatedOutput = Number.parseInt(order.outAmount) / Math.pow(10, outputTokenData.decimals)
 
   return {
     quote: {
-      inputMint: quote.inputMint,
-      outputMint: quote.outputMint,
-      inAmount: quote.inAmount,
-      outAmount: quote.outAmount,
-      priceImpactPct: quote.priceImpactPct,
+      inputMint: order.inputMint,
+      outputMint: order.outputMint,
+      inAmount: order.inAmount,
+      outAmount: order.outAmount,
+      priceImpactPct: order.priceImpactPct,
     },
-    transaction,
+    transaction: order.transaction,
     estimatedOutput,
-    priceImpact: quote.priceImpactPct,
+    priceImpact: order.priceImpactPct,
+    requestId: order.requestId,
   }
 }

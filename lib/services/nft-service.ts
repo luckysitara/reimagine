@@ -1,4 +1,11 @@
-const HELIUS_RPC_URL = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+const HELIUS_RPC_URL =
+  typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_HELIUS_RPC_URL
+    : process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL
+
+if (!HELIUS_RPC_URL) {
+  console.error("[v0] HELIUS_RPC_URL not configured!")
+}
 
 export interface NFTAsset {
   id: string

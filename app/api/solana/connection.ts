@@ -4,10 +4,13 @@ let connection: Connection | null = null
 
 export function getConnection(): Connection {
   if (!connection) {
-    const endpoint =
-      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+    const endpoint = process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL
 
-    console.log("[v0] Creating Solana connection for server-side operations")
+    if (!endpoint) {
+      throw new Error("HELIUS_RPC_URL or NEXT_PUBLIC_HELIUS_RPC_URL environment variable is required")
+    }
+
+    console.log("[v0] Creating Solana connection with Helius RPC for server-side operations")
     connection = new Connection(endpoint, "confirmed")
   }
 

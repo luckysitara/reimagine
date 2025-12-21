@@ -14,7 +14,6 @@ import { TokenSearchDialog } from "@/components/trading/token-search-dialog"
 import {
   getJupiterTokenList,
   getJupiterQuote,
-  getJupiterSwapTransaction,
   executeSwap,
   type JupiterToken,
   type JupiterQuote,
@@ -114,11 +113,12 @@ export function TradingPanel() {
       setIsSwapping(true)
       toast.loading("Preparing swap transaction...")
 
-      const swapTransaction = await getJupiterSwapTransaction(quote, publicKey.toBase58())
+      console.log("[v0] Starting swap with quote:", quote)
 
       toast.loading("Waiting for wallet signature...")
 
-      const result = await executeSwap(connection, swapTransaction, signTransaction)
+      // Execute the swap with the transaction and requestId from the quote
+      const result = await executeSwap(connection, quote.transaction, signTransaction, quote.requestId)
 
       if (result.success) {
         toast.success("Swap successful!", {

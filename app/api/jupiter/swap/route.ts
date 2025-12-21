@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
 const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6"
+const JUPITER_ULTRA_API = "https://api.jup.ag/ultra/v1"
+const JUPITER_API_KEY = process.env.JUPITER_API_KEY
 
 export async function POST(request: Request) {
   try {
@@ -12,49 +14,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required parameters: quoteResponse, userPublicKey" }, { status: 400 })
     }
 
-    console.log("[v0] Proxying Jupiter swap request for user:", userPublicKey)
+    console.log("[v0] Note: Using deprecated swap endpoint. Consider migrating to Ultra API /order + /execute flow")
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-    const response = await fetch(`${JUPITER_QUOTE_API}/swap`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "User-Agent": "Reimagine-DeFi/1.0",
-      },
-      body: JSON.stringify({
-        quoteResponse,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto",
-      }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId))
-
-    if (!response.ok) {
-      const error = await response.text()
-      console.error("[v0] Jupiter swap API error:", response.status, error)
-      return NextResponse.json(
-        { error: `Jupiter API returned ${response.status}: ${error}` },
-        { status: response.status },
-      )
+    if (quoteResponse.transaction) {
+      return NextResponse.json({
+        swapTransaction: quoteResponse.transaction,
+      })
     }
 
-    const data = await response.json()
-
-    return NextResponse.json(data)
+    // Fallback: If somehow old quote format is used, return error
+    return NextResponse.json(
+      {
+        error: "Invalid quote response format. Please use the Ultra API /order endpoint to get a transaction.",
+      },
+      { status: 400 },
+    )
   } catch (error) {
     console.error("[v0] Jupiter swap proxy error:", error)
-
-    if (error instanceof Error && error.name === "AbortError") {
-      return NextResponse.json(
-        { error: "Request timeout - Jupiter API is taking too long to respond" },
-        { status: 504 },
-      )
-    }
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to prepare swap transaction" },

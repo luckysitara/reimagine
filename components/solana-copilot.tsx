@@ -3,13 +3,14 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Send, Sparkles, Loader2, TrendingUp } from "lucide-react"
+import { Send, Sparkles, Loader2, TrendingUp, AlertCircle } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Message {
   role: "user" | "assistant" | "system"
@@ -38,6 +39,7 @@ export function SolanaCopilot() {
   ])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ limited: boolean; retryAfter?: number } | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,15 +48,15 @@ export function SolanaCopilot() {
 
     const userMessage = input.trim()
     setInput("")
+    setRateLimitInfo(null)
 
-    // Add user message
     setMessages((prev) => [...prev, { role: "user", content: userMessage }])
 
     setIsLoading(true)
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 45000)
+      const timeoutId = setTimeout(() => controller.abort(), 35000)
 
       const response = await fetch("/api/agent", {
         method: "POST",
@@ -68,6 +70,23 @@ export function SolanaCopilot() {
 
       clearTimeout(timeoutId)
 
+      if (response.status === 429) {
+        const errorData = await response.json()
+        setRateLimitInfo({
+          limited: true,
+          retryAfter: errorData.retryAfter || 60,
+        })
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `⏰ Rate limit reached. ${errorData.details || "Please wait a moment before trying again."}`,
+          },
+        ])
+        return
+      }
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || errorData.details || "Failed to get response")
@@ -79,7 +98,6 @@ export function SolanaCopilot() {
         throw new Error("Invalid response from AI")
       }
 
-      // Add assistant message
       setMessages((prev) => [
         ...prev,
         {
@@ -95,7 +113,7 @@ export function SolanaCopilot() {
 
       if (error instanceof Error) {
         if (error.name === "AbortError") {
-          errorMessage += "The request took too long. Please try again."
+          errorMessage += "The request took too long. Please try a simpler query."
         } else if (error.message.includes("API key") || error.message.includes("not configured")) {
           errorMessage +=
             "AI service not configured properly. Please check that GOOGLE_GENERATIVE_AI_API_KEY is set in environment variables."
@@ -136,6 +154,18 @@ export function SolanaCopilot() {
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4 overflow-hidden p-0">
+        {rateLimitInfo?.limited && (
+          <div className="px-6 pt-4">
+            <Alert variant="default" className="border-amber-500/50 bg-amber-500/10">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              <AlertDescription className="text-sm">
+                Rate limit reached. Please wait {rateLimitInfo.retryAfter} seconds before sending another message. The
+                free tier has strict limits on requests.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
         <ScrollArea className="flex-1 px-6">
           <div className="space-y-4 pb-4">
             {messages.map((message, index) => (

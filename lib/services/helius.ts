@@ -2,8 +2,12 @@ import { Connection, PublicKey } from "@solana/web3.js"
 
 const RPC_ENDPOINT =
   typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
-    : process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+    ? process.env.NEXT_PUBLIC_HELIUS_RPC_URL
+    : process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL
+
+if (!RPC_ENDPOINT) {
+  console.error("[v0] HELIUS_RPC_URL or NEXT_PUBLIC_HELIUS_RPC_URL not configured!")
+}
 
 export interface TokenBalance {
   mint: string

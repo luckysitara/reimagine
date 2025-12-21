@@ -2,9 +2,8 @@ import { type Connection, VersionedTransaction } from "@solana/web3.js"
 import { Buffer } from "buffer"
 
 const JUPITER_ULTRA_API = "https://api.jup.ag/ultra/v1"
-const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6"
 
-const JUPITER_API_KEY = process.env.JUPITER_API_KEY
+const JUPITER_API_KEY = typeof window === "undefined" ? process.env.JUPITER_API_KEY : undefined
 
 // Helper to add API key header if available
 function getJupiterHeaders(): HeadersInit {
@@ -31,23 +30,10 @@ export interface JupiterQuote {
   inAmount: string
   outputMint: string
   outAmount: string
-  otherAmountThreshold: string
-  swapMode: string
   slippageBps: number
   priceImpactPct: string
-  routePlan: Array<{
-    swapInfo: {
-      ammKey: string
-      label?: string
-      inputMint: string
-      outputMint: string
-      inAmount: string
-      outAmount: string
-      feeAmount: string
-      feeMint: string
-    }
-    percent: number
-  }>
+  requestId: string
+  transaction: string
 }
 
 export interface SwapResult {
@@ -124,57 +110,41 @@ export async function getJupiterQuote(
   inputMint: string,
   outputMint: string,
   amount: number,
-  slippageBps = 100, // 1% default slippage
+  slippageBps = 100,
+  taker?: string,
 ): Promise<JupiterQuote> {
   try {
+    // Ultra API requires taker address, use a fallback if not provided
+    const takerAddress = taker || "11111111111111111111111111111111"
+
     const url =
-      `/api/jupiter/quote?` +
+      `/api/jupiter/order?` +
       `inputMint=${inputMint}&` +
       `outputMint=${outputMint}&` +
       `amount=${amount}&` +
-      `slippageBps=${slippageBps}`
+      `slippageBps=${slippageBps}&` +
+      `taker=${takerAddress}`
 
-    console.log("[v0] Fetching Jupiter quote:", url)
+    console.log("[v0] Fetching Jupiter Ultra order:", url)
 
     const response = await fetch(url)
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`Quote failed: ${error}`)
+      throw new Error(`Order failed: ${error}`)
     }
 
-    const quote = await response.json()
-    console.log("[v0] Jupiter quote received:", quote)
-    return quote
+    const order = await response.json()
+    console.log("[v0] Jupiter Ultra order received:", order)
+    return order
   } catch (error) {
-    console.error("[v0] Jupiter quote error:", error)
+    console.error("[v0] Jupiter order error:", error)
     throw error
   }
 }
 
 export async function getJupiterSwapTransaction(quoteResponse: JupiterQuote, userPublicKey: string): Promise<string> {
-  try {
-    const response = await fetch(`/api/jupiter/swap`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        quoteResponse,
-        userPublicKey,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Swap transaction failed: ${error}`)
-    }
-
-    const { swapTransaction } = await response.json()
-    return swapTransaction
-  } catch (error) {
-    console.error("[v0] Jupiter swap transaction error:", error)
-    throw error
-  }
+  // Ultra API already includes the transaction in the order response
+  return quoteResponse.transaction
 }
 
 export async function getJupiterOrder(
@@ -186,16 +156,16 @@ export async function getJupiterOrder(
 ) {
   try {
     const url =
-      `${JUPITER_ULTRA_API}/order?` +
+      `/api/jupiter/order?` +
       `inputMint=${inputMint}&` +
       `outputMint=${outputMint}&` +
       `amount=${amount}&` +
       `taker=${taker}&` +
       `slippageBps=${slippageBps}`
 
-    const response = await fetch(url, {
-      headers: getJupiterHeaders(),
-    })
+    console.log("[v0] Fetching Jupiter Ultra order:", url)
+
+    const response = await fetch(url)
 
     if (!response.ok) {
       const error = await response.text()
@@ -211,9 +181,11 @@ export async function getJupiterOrder(
 
 export async function executeJupiterOrder(signedTransaction: string, requestId: string) {
   try {
-    const response = await fetch(`${JUPITER_ULTRA_API}/execute`, {
+    const response = await fetch(`/api/jupiter/execute`, {
       method: "POST",
-      headers: getJupiterHeaders(),
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         signedTransaction,
         requestId,
@@ -236,30 +208,84 @@ export async function executeSwap(
   connection: Connection,
   swapTransaction: string,
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
+  requestId?: string,
 ): Promise<SwapResult> {
   try {
-    // Deserialize the transaction
+    console.log("[v0] Deserializing transaction...")
+
+    // Deserialize the transaction from base64
     const transactionBuf = Buffer.from(swapTransaction, "base64")
-    const transaction = VersionedTransaction.deserialize(transactionBuf)
+    let transaction: VersionedTransaction
 
-    console.log("[v0] Transaction deserialized, requesting signature...")
+    try {
+      transaction = VersionedTransaction.deserialize(transactionBuf)
+    } catch (deserializeError) {
+      console.error("[v0] Transaction deserialization failed:", deserializeError)
+      throw new Error("Failed to deserialize transaction. The transaction data may be corrupted.")
+    }
 
-    // Sign the transaction
-    const signedTransaction = await signTransaction(transaction)
+    console.log("[v0] Transaction deserialized successfully, requesting signature...")
 
-    console.log("[v0] Transaction signed, sending...")
+    // Sign the transaction using wallet
+    let signedTransaction: VersionedTransaction
+    try {
+      signedTransaction = await signTransaction(transaction)
+    } catch (signError) {
+      console.error("[v0] Transaction signing failed:", signError)
+      if (signError instanceof Error && signError.message.includes("User rejected")) {
+        throw new Error("Transaction cancelled by user")
+      }
+      throw new Error("Failed to sign transaction")
+    }
 
-    // Send the transaction
+    console.log("[v0] Transaction signed successfully")
+
+    // Serialize the signed transaction to base64
+    const signedTransactionBase64 = Buffer.from(signedTransaction.serialize()).toString("base64")
+
+    // If we have a requestId, use the Ultra API execute endpoint
+    if (requestId) {
+      console.log("[v0] Executing via Ultra API...")
+
+      const executeResponse = await fetch("/api/jupiter/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          signedTransaction: signedTransactionBase64,
+          requestId,
+        }),
+      })
+
+      if (!executeResponse.ok) {
+        const error = await executeResponse.text()
+        throw new Error(`Ultra API execute failed: ${error}`)
+      }
+
+      const result = await executeResponse.json()
+      console.log("[v0] Ultra API execute result:", result)
+
+      return {
+        success: true,
+        signature: result.signature || result.txid,
+      }
+    }
+
+    // Otherwise, send directly to the network
+    console.log("[v0] Sending transaction to network...")
+
     const rawTransaction = signedTransaction.serialize()
     const signature = await connection.sendRawTransaction(rawTransaction, {
       skipPreflight: false,
       maxRetries: 3,
+      preflightCommitment: "confirmed",
     })
 
     console.log("[v0] Transaction sent:", signature)
 
     // Confirm the transaction
-    const latestBlockhash = await connection.getLatestBlockhash()
+    const latestBlockhash = await connection.getLatestBlockhash("confirmed")
     await connection.confirmTransaction(
       {
         signature,
@@ -280,10 +306,12 @@ export async function executeSwap(
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
 
-    if (errorMessage.includes("User rejected")) {
+    if (errorMessage.includes("User rejected") || errorMessage.includes("cancelled")) {
       return { success: false, error: "Transaction cancelled by user" }
     } else if (errorMessage.includes("insufficient")) {
       return { success: false, error: "Insufficient balance for transaction" }
+    } else if (errorMessage.includes("deserialize")) {
+      return { success: false, error: "Invalid transaction format" }
     }
 
     return {

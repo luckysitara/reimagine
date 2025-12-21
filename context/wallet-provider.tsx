@@ -15,16 +15,14 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
   const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK as WalletAdapterNetwork) || WalletAdapterNetwork.Mainnet
 
   const endpoint = useMemo(() => {
-    // Use the public Helius endpoint for wallet operations only
-    // All sensitive operations (swaps, transactions) go through API routes
     const heliusEndpoint = process.env.NEXT_PUBLIC_HELIUS_RPC_URL
 
     if (!heliusEndpoint) {
-      // Fallback to mainnet-beta during build time
-      console.warn("[v0] NEXT_PUBLIC_HELIUS_RPC_URL not configured, using mainnet-beta")
-      return "https://api.mainnet-beta.solana.com"
+      console.error("[v0] NEXT_PUBLIC_HELIUS_RPC_URL not configured! Please set the environment variable.")
+      throw new Error("NEXT_PUBLIC_HELIUS_RPC_URL environment variable is required")
     }
 
+    console.log("[v0] Using Helius RPC for wallet operations")
     return heliusEndpoint
   }, [])
 

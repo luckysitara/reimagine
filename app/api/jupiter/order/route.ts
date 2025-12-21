@@ -12,6 +12,8 @@ export async function GET(request: Request) {
     const amount = searchParams.get("amount")
     const slippageBps = searchParams.get("slippageBps") || "100"
     const taker = searchParams.get("taker")
+    const referralAccount = searchParams.get("referralAccount")
+    const referralFee = searchParams.get("referralFee")
 
     if (!inputMint || !outputMint || !amount || !taker) {
       return NextResponse.json(
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
       )
     }
 
-    const url =
+    let url =
       `${JUPITER_ULTRA_API}/order?` +
       `inputMint=${inputMint}&` +
       `outputMint=${outputMint}&` +
@@ -28,10 +30,18 @@ export async function GET(request: Request) {
       `taker=${taker}&` +
       `slippageBps=${slippageBps}`
 
-    console.log("[v0] Proxying Jupiter Ultra order request:", url)
+    // Add optional referral parameters
+    if (referralAccount) {
+      url += `&referralAccount=${referralAccount}`
+    }
+    if (referralFee) {
+      url += `&referralFee=${referralFee}`
+    }
+
+    console.log("[v0] Proxying Jupiter Ultra order request")
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
 
     const headers: HeadersInit = {
       Accept: "application/json",

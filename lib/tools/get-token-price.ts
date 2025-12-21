@@ -23,11 +23,14 @@ export async function getTokenPrice(tokenSymbol: string): Promise<TokenPrice> {
     // Use 1 token with proper decimals
     const oneToken = Math.pow(10, token.decimals)
 
+    const dummyTaker = "11111111111111111111111111111111"
+
     const quote = await getJupiterQuote(
       token.address,
       USDC_MINT,
       oneToken,
       50, // 0.5% slippage for quotes
+      dummyTaker,
     )
 
     // USDC has 6 decimals
