@@ -3,19 +3,23 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Zap, Upload, Loader2 } from "lucide-react"
+import { Zap, Loader2, CheckCircle2, ExternalLink } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { Connection, Transaction } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
 
 export function TokenStudioPanel() {
-  const { publicKey } = useWallet()
+  const { publicKey, signTransaction } = useWallet()
   const { setVisible } = useWalletModal()
+  const { toast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
+  const [createdToken, setCreatedToken] = useState<{ mintAddress: string; signature: string } | null>(null)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -33,18 +37,92 @@ export function TokenStudioPanel() {
       return
     }
 
+    if (!signTransaction) {
+      toast({
+        title: "Wallet Error",
+        description: "Your wallet doesn't support transaction signing",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsCreating(true)
+    setCreatedToken(null)
 
     try {
-      // In production, integrate with Jupiter Studio API
       console.log("[v0] Creating token:", formData)
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Call API to prepare transaction
+      const response = await fetch("/api/token/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          walletAddress: publicKey.toBase58(),
+        }),
+      })
 
-      alert("Token creation functionality requires Jupiter Studio API integration")
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create token")
+      }
+
+      console.log("[v0] Token creation response:", data)
+
+      // Deserialize and sign transaction
+      const transaction = Transaction.from(Buffer.from(data.transaction, "base64"))
+
+      console.log("[v0] Signing transaction...")
+      const signedTransaction = await signTransaction(transaction)
+
+      // Send transaction
+      const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL
+      if (!rpcUrl) {
+        throw new Error("RPC URL not configured")
+      }
+
+      const connection = new Connection(rpcUrl, "confirmed")
+      console.log("[v0] Sending transaction...")
+
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize())
+      console.log("[v0] Transaction sent:", signature)
+
+      toast({
+        title: "Transaction Sent",
+        description: "Confirming your token creation...",
+      })
+
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, "confirmed")
+
+      console.log("[v0] Token created successfully!")
+
+      setCreatedToken({
+        mintAddress: data.mintAddress,
+        signature,
+      })
+
+      toast({
+        title: "Token Created!",
+        description: `${formData.symbol} has been successfully created`,
+      })
+
+      // Reset form
+      setFormData({
+        name: "",
+        symbol: "",
+        decimals: "9",
+        supply: "",
+        description: "",
+      })
     } catch (error) {
       console.error("[v0] Token creation error:", error)
+      toast({
+        title: "Creation Failed",
+        description: error instanceof Error ? error.message : "Failed to create token",
+        variant: "destructive",
+      })
     } finally {
       setIsCreating(false)
     }
@@ -62,117 +140,162 @@ export function TokenStudioPanel() {
         </div>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        {createdToken ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-green-500">
+              <CheckCircle2 className="h-5 w-5" />
+              <h3 className="text-lg font-semibold">Token Created Successfully!</h3>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Mint Address</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono">
+                    {createdToken.mintAddress}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdToken.mintAddress)
+                      toast({ title: "Copied to clipboard" })
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Transaction Signature</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono truncate">
+                    {createdToken.signature}
+                  </code>
+                  <Button size="sm" variant="outline" asChild>
+                    <a
+                      href={`https://solscan.io/tx/${createdToken.signature}${
+                        process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
+                      }`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={() => setCreatedToken(null)} className="w-full">
+              Create Another Token
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="name">Token Name</Label>
+                <Input
+                  id="name"
+                  placeholder="My Token"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="symbol">Symbol</Label>
+                <Input
+                  id="symbol"
+                  placeholder="MTK"
+                  value={formData.symbol}
+                  onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
+                  required
+                  maxLength={10}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="decimals">Decimals</Label>
+                <Input
+                  id="decimals"
+                  type="number"
+                  placeholder="9"
+                  value={formData.decimals}
+                  onChange={(e) => setFormData({ ...formData, decimals: e.target.value })}
+                  required
+                  min="0"
+                  max="9"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="supply">Total Supply</Label>
+                <Input
+                  id="supply"
+                  type="number"
+                  placeholder="1000000"
+                  value={formData.supply}
+                  onChange={(e) => setFormData({ ...formData, supply: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="name">Token Name</Label>
-              <Input
-                id="name"
-                placeholder="My Token"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Describe your token..."
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="symbol">Symbol</Label>
-              <Input
-                id="symbol"
-                placeholder="MTK"
-                value={formData.symbol}
-                onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
-                required
-                maxLength={10}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="decimals">Decimals</Label>
-              <Input
-                id="decimals"
-                type="number"
-                placeholder="9"
-                value={formData.decimals}
-                onChange={(e) => setFormData({ ...formData, decimals: e.target.value })}
-                required
-                min="0"
-                max="9"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="supply">Total Supply</Label>
-              <Input
-                id="supply"
-                type="number"
-                placeholder="1000000"
-                value={formData.supply}
-                onChange={(e) => setFormData({ ...formData, supply: e.target.value })}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe your token..."
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="logo">Token Logo</Label>
-            <div className="flex items-center gap-2">
-              <Input id="logo" type="file" accept="image/*" className="flex-1" />
-              <Button type="button" variant="outline" size="icon">
-                <Upload className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">Recommended: 512x512px PNG or JPG</p>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
-            <h4 className="text-sm font-semibold">Token Configuration</h4>
-            <div className="grid gap-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Network</span>
-                <span className="font-medium">Solana Mainnet</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Freeze Authority</span>
-                <span className="font-medium">None</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Mint Authority</span>
-                <span className="font-medium">Your Wallet</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Creation Fee</span>
-                <span className="font-medium">~0.01 SOL</span>
+            <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+              <h4 className="text-sm font-semibold">Token Configuration</h4>
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Network</span>
+                  <span className="font-medium">
+                    Solana {process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet-beta" ? "Mainnet" : "Devnet"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Freeze Authority</span>
+                  <span className="font-medium">Your Wallet</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mint Authority</span>
+                  <span className="font-medium">Your Wallet</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Estimated Fee</span>
+                  <span className="font-medium">~0.01 SOL</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
-            {isCreating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating Token...
-              </>
-            ) : !publicKey ? (
-              "Connect Wallet to Create"
-            ) : (
-              "Create Token"
-            )}
-          </Button>
-        </form>
+            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
+              {isCreating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating Token...
+                </>
+              ) : !publicKey ? (
+                "Connect Wallet to Create"
+              ) : (
+                "Create Token"
+              )}
+            </Button>
+          </form>
+        )}
       </CardContent>
     </Card>
   )

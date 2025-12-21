@@ -1,4 +1,5 @@
-import { GoogleGenAI, type FunctionDeclaration, FunctionCallingConfigMode } from "@google/genai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
+import type { FunctionDeclaration } from "@google/generative-ai"
 import { prepareSwap } from "@/lib/tools/execute-swap"
 import { analyzePortfolio } from "@/lib/tools/analyze-portfolio"
 import { getTokenPrice } from "@/lib/tools/get-token-price"
@@ -24,18 +25,18 @@ const tools: FunctionDeclaration[] = [
     name: "execute_swap",
     description: "Prepare a token swap on Solana using Jupiter DEX. Returns transaction details for user confirmation.",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         inputToken: {
-          type: "string",
+          type: "string" as const,
           description: "Symbol of the input token (e.g., SOL, USDC)",
         },
         outputToken: {
-          type: "string",
+          type: "string" as const,
           description: "Symbol of the output token (e.g., SOL, USDC)",
         },
         amount: {
-          type: "number",
+          type: "number" as const,
           description: "Amount of input token to swap",
         },
       },
@@ -46,10 +47,10 @@ const tools: FunctionDeclaration[] = [
     name: "analyze_portfolio",
     description: "Analyze the user's Solana portfolio and provide insights, recommendations, and risk assessment",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         walletAddress: {
-          type: "string",
+          type: "string" as const,
           description: "Solana wallet address to analyze",
         },
       },
@@ -60,10 +61,10 @@ const tools: FunctionDeclaration[] = [
     name: "get_token_price",
     description: "Get the current price of a Solana token in USD",
     parameters: {
-      type: "object",
+      type: "object" as const,
       properties: {
         tokenSymbol: {
-          type: "string",
+          type: "string" as const,
           description: "Token symbol (e.g., SOL, USDC, BONK)",
         },
       },
@@ -91,19 +92,17 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error: "AI service not configured. The GOOGLE_GENERATIVE_AI_API_KEY environment variable is missing.",
-          hint: "Add GOOGLE_GENERATIVE_AI_API_KEY to your .env.local file and restart the dev server",
+          hint: "Add GOOGLE_GENERATIVE_AI_API_KEY to your environment variables",
         },
         { status: 500 },
       )
     }
 
-    console.log("[v0] API key found, length:", apiKey.length)
+    console.log("[v0] API key found, initializing Google AI client...")
 
-    const genAI = new GoogleGenAI({
-      apiKey: apiKey,
-    })
+    const genAI = new GoogleGenerativeAI(apiKey)
 
-    console.log("[v0] GoogleGenAI client initialized")
+    console.log("[v0] GoogleGenerativeAI client initialized")
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash-exp",
@@ -111,7 +110,7 @@ export async function POST(request: Request) {
       tools: [{ functionDeclarations: tools }],
       toolConfig: {
         functionCallingConfig: {
-          mode: FunctionCallingConfigMode.AUTO,
+          mode: "AUTO" as const,
         },
       },
     })
@@ -125,7 +124,7 @@ export async function POST(request: Request) {
     const result = (await Promise.race([
       model.generateContent(userPrompt),
       new Promise((_, reject) => setTimeout(() => reject(new Error("Request timeout")), 30000)),
-    ])) as { response: any }
+    ])) as any
 
     const response = result.response
 
@@ -226,7 +225,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       text: responseText,
-      toolCalls: functionCalls?.map((fc) => ({
+      toolCalls: functionCalls?.map((fc: any) => ({
         toolName: fc.name,
         args: fc.args,
       })),

@@ -744,6 +744,14 @@ Built with ❤️ by [Your Name/Team]
 
 ---
 
+## 📞 Contact & Support
+
+- **Email**: your.email@example.com
+- **Twitter**: [@yourproject](https://twitter.com/yourhandle)
+- **Discord**: [Join our community](#)
+- **GitHub Issues**: [Report bugs](https://github.com/yourusername/reimagine/issues)
+
+---
 
 <div align="center">
 
