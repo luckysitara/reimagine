@@ -134,7 +134,15 @@ export async function getJupiterQuote(
     }
 
     const order = await response.json()
-    console.log("[v0] Jupiter Ultra order received:", order)
+    console.log("[v0] Jupiter Ultra order received - has transaction:", !!order.transaction)
+
+    if (!order.transaction) {
+      console.error("[v0] Order response missing transaction field. Response keys:", Object.keys(order))
+      throw new Error(
+        "Jupiter API response is missing the transaction field. This may indicate an API configuration issue.",
+      )
+    }
+
     return order
   } catch (error) {
     console.error("[v0] Jupiter order error:", error)
@@ -172,7 +180,14 @@ export async function getJupiterOrder(
       throw new Error(`Order failed: ${error}`)
     }
 
-    return await response.json()
+    const order = await response.json()
+
+    if (!order.transaction) {
+      console.error("[v0] Order missing transaction field:", order)
+      throw new Error("Jupiter API response is missing the transaction field")
+    }
+
+    return order
   } catch (error) {
     console.error("[v0] Jupiter order error:", error)
     throw error
@@ -211,25 +226,46 @@ export async function executeSwap(
   requestId?: string,
 ): Promise<SwapResult> {
   try {
-    console.log("[v0] Deserializing transaction...")
+    if (!swapTransaction || swapTransaction.trim() === "") {
+      console.error("[v0] Empty transaction string provided")
+      throw new Error("Transaction data is empty or missing")
+    }
+
+    console.log("[v0] Deserializing transaction (length:", swapTransaction.length, ")...")
 
     // Deserialize the transaction from base64
-    const transactionBuf = Buffer.from(swapTransaction, "base64")
+    let transactionBuf: Buffer
+    try {
+      transactionBuf = Buffer.from(swapTransaction, "base64")
+      if (transactionBuf.length === 0) {
+        throw new Error("Transaction buffer is empty after base64 decode")
+      }
+      console.log("[v0] Transaction buffer size:", transactionBuf.length, "bytes")
+    } catch (bufferError) {
+      console.error("[v0] Failed to decode base64 transaction:", bufferError)
+      throw new Error("Invalid base64 transaction data")
+    }
+
     let transaction: VersionedTransaction
 
     try {
       transaction = VersionedTransaction.deserialize(transactionBuf)
+      console.log("[v0] Transaction deserialized successfully")
     } catch (deserializeError) {
       console.error("[v0] Transaction deserialization failed:", deserializeError)
-      throw new Error("Failed to deserialize transaction. The transaction data may be corrupted.")
+      console.error("[v0] Transaction buffer preview (first 50 bytes):", transactionBuf.slice(0, 50).toString("hex"))
+      throw new Error(
+        "Failed to deserialize transaction. The transaction data may be corrupted or in an invalid format.",
+      )
     }
 
-    console.log("[v0] Transaction deserialized successfully, requesting signature...")
+    console.log("[v0] Requesting signature from wallet...")
 
     // Sign the transaction using wallet
     let signedTransaction: VersionedTransaction
     try {
       signedTransaction = await signTransaction(transaction)
+      console.log("[v0] Transaction signed successfully")
     } catch (signError) {
       console.error("[v0] Transaction signing failed:", signError)
       if (signError instanceof Error && signError.message.includes("User rejected")) {
@@ -238,14 +274,12 @@ export async function executeSwap(
       throw new Error("Failed to sign transaction")
     }
 
-    console.log("[v0] Transaction signed successfully")
-
     // Serialize the signed transaction to base64
     const signedTransactionBase64 = Buffer.from(signedTransaction.serialize()).toString("base64")
 
     // If we have a requestId, use the Ultra API execute endpoint
     if (requestId) {
-      console.log("[v0] Executing via Ultra API...")
+      console.log("[v0] Executing via Ultra API with requestId:", requestId)
 
       const executeResponse = await fetch("/api/jupiter/execute", {
         method: "POST",
@@ -260,6 +294,7 @@ export async function executeSwap(
 
       if (!executeResponse.ok) {
         const error = await executeResponse.text()
+        console.error("[v0] Ultra API execute failed:", error)
         throw new Error(`Ultra API execute failed: ${error}`)
       }
 
@@ -273,7 +308,7 @@ export async function executeSwap(
     }
 
     // Otherwise, send directly to the network
-    console.log("[v0] Sending transaction to network...")
+    console.log("[v0] Sending transaction directly to Solana network...")
 
     const rawTransaction = signedTransaction.serialize()
     const signature = await connection.sendRawTransaction(rawTransaction, {
@@ -310,8 +345,10 @@ export async function executeSwap(
       return { success: false, error: "Transaction cancelled by user" }
     } else if (errorMessage.includes("insufficient")) {
       return { success: false, error: "Insufficient balance for transaction" }
-    } else if (errorMessage.includes("deserialize")) {
-      return { success: false, error: "Invalid transaction format" }
+    } else if (errorMessage.includes("deserialize") || errorMessage.includes("buffer")) {
+      return { success: false, error: "Invalid transaction format from Jupiter API" }
+    } else if (errorMessage.includes("missing")) {
+      return { success: false, error: "Transaction data is missing from API response" }
     }
 
     return {

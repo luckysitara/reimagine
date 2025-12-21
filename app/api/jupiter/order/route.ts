@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       url += `&referralFee=${referralFee}`
     }
 
-    console.log("[v0] Proxying Jupiter Ultra order request")
+    console.log("[v0] Proxying Jupiter Ultra order request to:", url)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 15000)
@@ -67,6 +67,14 @@ export async function GET(request: Request) {
     }
 
     const order = await response.json()
+
+    console.log("[v0] Jupiter Ultra order response keys:", Object.keys(order))
+    console.log("[v0] Transaction field present:", !!order.transaction)
+    if (order.transaction) {
+      console.log("[v0] Transaction field length:", order.transaction.length)
+    } else {
+      console.error("[v0] WARNING: Transaction field is missing from Jupiter response!")
+    }
 
     return NextResponse.json(order, {
       headers: {
