@@ -33,11 +33,18 @@ const navigation = [
 interface CollapsibleSidebarProps {
   activePanel: string
   onPanelChange: (panel: string) => void
+  onCollapseChange?: (collapsed: boolean) => void
 }
 
-export function CollapsibleSidebar({ activePanel, onPanelChange }: CollapsibleSidebarProps) {
+export function CollapsibleSidebar({ activePanel, onPanelChange, onCollapseChange }: CollapsibleSidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const handleCollapseToggle = () => {
+    const newCollapsed = !collapsed
+    setCollapsed(newCollapsed)
+    onCollapseChange?.(newCollapsed)
+  }
 
   return (
     <>
@@ -109,7 +116,7 @@ export function CollapsibleSidebar({ activePanel, onPanelChange }: CollapsibleSi
 
         {/* Collapse Toggle (Desktop only) */}
         <div className="hidden border-t border-sidebar-border p-3 lg:block">
-          <Button variant="ghost" size="sm" onClick={() => setCollapsed(!collapsed)} className="w-full justify-center">
+          <Button variant="ghost" size="sm" onClick={handleCollapseToggle} className="w-full justify-center">
             {collapsed ? (
               <ChevronRight className="h-5 w-5" />
             ) : (

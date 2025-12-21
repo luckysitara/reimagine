@@ -46,10 +46,18 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      <CollapsibleSidebar activePanel={activePanel} onPanelChange={setActivePanel} />
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
+      <CollapsibleSidebar
+        activePanel={activePanel}
+        onPanelChange={setActivePanel}
+        onCollapseChange={setSidebarCollapsed}
+      />
 
-      <div className="flex flex-1 flex-col lg:ml-64 transition-all duration-300">
+      <div
+        className={`flex flex-1 flex-col transition-all duration-300 ${
+          sidebarCollapsed ? "ml-0 lg:ml-16" : "ml-0 lg:ml-64"
+        }`}
+      >
         <Header sidebarCollapsed={sidebarCollapsed} />
 
         <main className="flex-1 overflow-auto">
