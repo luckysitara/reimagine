@@ -6,7 +6,7 @@
 
 **The Future of DeFi Trading - Powered by AI**
 
-[🌐 Live Demo](#) | [📊 Pitch Deck](#) | [📹 Demo Video](#) | [🐛 Report Bug](https://github.com/yourusername/reimagine/issues)
+[🌐 Live Demo](http://solana-reimagine.vercel.app) | [📊 Pitch Deck](#) | [📹 Demo Video](#) 
 
 [![Built with Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
 [![Powered by Solana](https://img.shields.io/badge/Solana-Mainnet-9945FF)](https://solana.com/)
@@ -233,14 +233,14 @@ Create your own SPL tokens in minutes:
 
 ### 🔗 Links
 
-- **Live Application**: [https://your-app.vercel.app](#) *(Replace with your deployment URL)*
+- **Live Application**: [http://solana-reimagine.vercel.app](http://solana-reimagine.vercel.app)
 - **Pitch Deck**: [View Presentation](#) *(Add your pitch deck link)*
 - **Demo Video**: [Watch on YouTube](#) *(Add your demo video link)*
 - **GitHub Repository**: [View Source Code](#) *(Add your repo link)*
 
 ### 🎮 Try It Out
 
-1. Visit the live demo
+1. Visit the live demo at [http://solana-reimagine.vercel.app](http://solana-reimagine.vercel.app)
 2. Connect your Solana wallet (Phantom, Solflare, or Backpack)
 3. Try the AI Copilot: "Swap 1 SOL for USDC"
 4. Explore your portfolio and NFT collection
@@ -744,14 +744,6 @@ Built with ❤️ by [Your Name/Team]
 
 ---
 
-## 📞 Contact & Support
-
-- **Email**: your.email@example.com
-- **Twitter**: [@yourproject](https://twitter.com/yourhandle)
-- **Discord**: [Join our community](#)
-- **GitHub Issues**: [Report bugs](https://github.com/yourusername/reimagine/issues)
-
----
 
 <div align="center">
 
