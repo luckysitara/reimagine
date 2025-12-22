@@ -172,11 +172,14 @@ export function DCAPanel() {
         throw new Error(data.error || "Failed to create DCA")
       }
 
-      toast.success("DCA order created successfully!")
+      toast.success("DCA order created successfully! Refreshing order list...")
       setShowCreateDialog(false)
       setTotalAmount("")
       setAmountPerCycle("")
-      loadDCAAccounts()
+
+      setTimeout(() => {
+        loadDCAAccounts()
+      }, 2000)
     } catch (error) {
       console.error("[v0] Create DCA error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create DCA")

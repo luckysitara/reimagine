@@ -155,11 +155,14 @@ export function LimitOrdersPanel() {
         throw new Error(data.error || "Failed to create limit order")
       }
 
-      toast.success("Limit order created successfully!")
+      toast.success("Limit order created successfully! Refreshing order list...")
       setShowCreateDialog(false)
       setInputAmount("")
       setTargetPrice("")
-      loadOrders()
+
+      setTimeout(() => {
+        loadOrders()
+      }, 2000)
     } catch (error) {
       console.error("[v0] Create order error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create limit order")
