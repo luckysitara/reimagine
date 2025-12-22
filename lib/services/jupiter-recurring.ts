@@ -34,17 +34,17 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
     outputMint: params.outputMint,
     params: {
       time: {
-        inAmount: params.amount,
+        inAmount: Number(params.amount), // Convert string to number
         numberOfOrders: params.numberOfOrders,
         interval: params.cycleFrequency,
-        minPrice: params.minOutAmountPerCycle || null,
-        maxPrice: params.maxOutAmountPerCycle || null,
+        minPrice: params.minOutAmountPerCycle ? Number(params.minOutAmountPerCycle) : null,
+        maxPrice: params.maxOutAmountPerCycle ? Number(params.maxOutAmountPerCycle) : null,
         startAt: params.startAt || null,
       },
     },
   }
 
-  console.log("[v0] Sending DCA request:", requestBody)
+  console.log("[v0] Sending DCA request:", JSON.stringify(requestBody, null, 2))
 
   const response = await fetch(`${JUPITER_API_URLS.recurring}/createOrder`, {
     method: "POST",
@@ -54,6 +54,7 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
 
   if (!response.ok) {
     const text = await response.text()
+    console.error("[v0] DCA API error response:", text)
     try {
       const error = JSON.parse(text)
       throw new Error(`DCA creation failed: ${response.statusText} - ${JSON.stringify(error)}`)

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Zap, Loader2, CheckCircle2, ExternalLink, Sparkles, AlertCircle } from "lucide-react"
+import { Zap, Loader2, CheckCircle2, ExternalLink, Sparkles } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Transaction } from "@solana/web3.js"
@@ -15,7 +15,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useConnection } from "@solana/wallet-adapter-react"
 import { useSolanaBalance } from "@/hooks/use-solana-balance"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function TokenStudioPanel() {
   const { publicKey, signTransaction } = useWallet()
@@ -183,16 +182,6 @@ export function TokenStudioPanel() {
         </div>
       </CardHeader>
       <CardContent>
-        {publicKey && balance < 0.1 && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Insufficient balance. You need at least 0.1 SOL to create a token. Current balance: {balance.toFixed(4)}{" "}
-              SOL
-            </AlertDescription>
-          </Alert>
-        )}
-
         {createdToken ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-green-500">
@@ -375,7 +364,7 @@ export function TokenStudioPanel() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating || balance < 0.1}>
+            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
               {isCreating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -383,8 +372,6 @@ export function TokenStudioPanel() {
                 </>
               ) : !publicKey ? (
                 "Connect Wallet to Create"
-              ) : balance < 0.1 ? (
-                "Insufficient Balance"
               ) : (
                 "Create Token"
               )}
