@@ -25,16 +25,21 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
     // Server-side/build-time: use a valid placeholder URL that will be replaced
     // This prevents the "Endpoint URL must start with http: or https:" error during build
     return "https://api.mainnet-beta.solana.com"
-  }, [network])
+  }, [])
 
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter(), new BackpackWalletAdapter()],
     [],
   )
 
+  const onError = (error: any) => {
+    console.error("[v0] Wallet error:", error)
+    // Don't show confusing errors to users - they'll see specific messages when they try to connect
+  }
+
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect onError={onError}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

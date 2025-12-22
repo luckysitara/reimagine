@@ -237,7 +237,8 @@ export async function POST(request: Request) {
 
       if (!apiKey || apiKey.trim() === "" || apiKey === "your-api-key-here") {
         await sendMessage({
-          error: "AI service not configured. Please set a valid GOOGLE_GENERATIVE_AI_API_KEY in environment variables.",
+          error:
+            "AI service not configured. Please set a valid GOOGLE_GENERATIVE_AI_API_KEY in environment variables. Get your free API key at https://ai.google.dev/",
         })
         await writer.close()
         return
@@ -338,13 +339,34 @@ export async function POST(request: Request) {
       await sendMessage({ type: "done" })
       await writer.close()
     } catch (error: any) {
-      console.error("Agent error:", error)
+      console.error("[v0] Agent error:", error)
 
       let errorMessage = "Failed to process request"
 
+      // Handle API key errors
       if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("API key not valid")) {
-        errorMessage = "Invalid Google AI API key. Please check your configuration."
-      } else if (error?.message) {
+        errorMessage =
+          "Invalid Google AI API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration. Get a free key at https://ai.google.dev/"
+      }
+      // Handle quota exceeded errors (429 Too Many Requests)
+      else if (
+        error?.message?.includes("quota") ||
+        error?.message?.includes("429") ||
+        error?.message?.includes("Too Many Requests")
+      ) {
+        errorMessage =
+          "Google AI API quota exceeded. Your free tier limits have been reached. Please wait a few minutes and try again, or upgrade your API plan at https://ai.google.dev/pricing"
+      }
+      // Handle rate limit errors
+      else if (error?.message?.includes("rate limit") || error?.status === 429) {
+        errorMessage = "Rate limit exceeded. Please wait a moment before sending another message."
+      }
+      // Handle model unavailable errors
+      else if (error?.message?.includes("model") && error?.message?.includes("not found")) {
+        errorMessage = "The AI model is not available. Please check your API key permissions or try again later."
+      }
+      // Generic error with message
+      else if (error?.message) {
         errorMessage = error.message
       }
 
