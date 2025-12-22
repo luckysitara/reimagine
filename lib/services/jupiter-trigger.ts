@@ -32,7 +32,7 @@ export async function createLimitOrder(params: CreateLimitOrderParams): Promise<
     params: {
       makingAmount: params.makingAmount,
       takingAmount: params.takingAmount,
-      expiredAt: params.expiredAt,
+      expiredAt: params.expiredAt ? params.expiredAt.toString() : undefined,
     },
   }
 

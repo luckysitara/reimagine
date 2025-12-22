@@ -30,14 +30,17 @@ export interface DCAAccount {
 export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: string }> {
   const requestBody = {
     user: params.payer,
-    payer: params.payer,
     inputMint: params.inputMint,
     outputMint: params.outputMint,
     params: {
-      recurringType: "time",
-      amount: params.amount,
-      frequency: params.cycleFrequency,
-      numberOfOrders: params.numberOfOrders,
+      time: {
+        inAmount: params.amount,
+        numberOfOrders: params.numberOfOrders,
+        interval: params.cycleFrequency,
+        minPrice: params.minOutAmountPerCycle || null,
+        maxPrice: params.maxOutAmountPerCycle || null,
+        startAt: params.startAt || null,
+      },
     },
   }
 
