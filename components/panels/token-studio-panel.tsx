@@ -95,6 +95,9 @@ export function TokenStudioPanel() {
       return
     }
 
+    console.log("[v0] Checking balance before token creation...")
+    console.log("[v0] Current balance:", balance)
+
     const estimatedFee = 0.1 // Estimated SOL needed for token creation
     if (balance < estimatedFee) {
       toast({
@@ -109,6 +112,8 @@ export function TokenStudioPanel() {
     setCreatedToken(null)
 
     try {
+      console.log("[v0] Creating token with form data:", formData)
+
       const response = await fetch("/api/token/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +124,7 @@ export function TokenStudioPanel() {
       })
 
       const data = await response.json()
+      console.log("[v0] Token creation API response:", data)
 
       if (!response.ok) {
         throw new Error(data.error || data.details || "Failed to create token")
@@ -126,8 +132,10 @@ export function TokenStudioPanel() {
 
       const transaction = Transaction.from(Buffer.from(data.transaction, "base64"))
 
+      console.log("[v0] Signing transaction...")
       const signedTransaction = await signTransaction(transaction)
 
+      console.log("[v0] Sending transaction...")
       const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
@@ -138,6 +146,7 @@ export function TokenStudioPanel() {
         description: "Confirming your token creation...",
       })
 
+      console.log("[v0] Confirming transaction:", signature)
       await connection.confirmTransaction(signature, "confirmed")
 
       setCreatedToken({

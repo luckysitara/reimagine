@@ -80,14 +80,21 @@ export function LimitOrdersPanel() {
     if (!publicKey) return
 
     setIsLoading(true)
+    console.log("[v0] Loading orders for wallet:", publicKey.toBase58())
     try {
       const response = await fetch(`/api/jupiter/limit-orders?wallet=${publicKey.toBase58()}`)
+      console.log("[v0] Orders API response status:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("[v0] Orders data received:", data)
         setOrders(data)
+      } else {
+        const error = await response.text()
+        console.error("[v0] Orders API error:", error)
       }
     } catch (error) {
-      console.error("Failed to load limit orders:", error)
+      console.error("[v0] Failed to load limit orders:", error)
     } finally {
       setIsLoading(false)
     }
@@ -155,14 +162,17 @@ export function LimitOrdersPanel() {
         throw new Error(data.error || "Failed to create limit order")
       }
 
-      toast.success("Limit order created successfully! Refreshing order list...")
+      toast.success(
+        "Limit order transaction created! The order will appear after blockchain confirmation (may take a few moments).",
+      )
       setShowCreateDialog(false)
       setInputAmount("")
       setTargetPrice("")
 
       setTimeout(() => {
+        console.log("[v0] Refreshing orders after delay...")
         loadOrders()
-      }, 2000)
+      }, 5000)
     } catch (error) {
       console.error("[v0] Create order error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create limit order")

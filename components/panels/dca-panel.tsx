@@ -89,14 +89,21 @@ export function DCAPanel() {
     if (!publicKey) return
 
     setIsLoading(true)
+    console.log("[v0] Loading DCA accounts for wallet:", publicKey.toBase58())
     try {
       const response = await fetch(`/api/jupiter/dca?wallet=${publicKey.toBase58()}`)
+      console.log("[v0] DCA API response status:", response.status)
+
       if (response.ok) {
         const data = await response.json()
+        console.log("[v0] DCA data received:", data)
         setDcaAccounts(data)
+      } else {
+        const error = await response.text()
+        console.error("[v0] DCA API error:", error)
       }
     } catch (error) {
-      console.error("Failed to load DCA accounts:", error)
+      console.error("[v0] Failed to load DCA accounts:", error)
     } finally {
       setIsLoading(false)
     }
@@ -159,7 +166,7 @@ export function DCAPanel() {
           inputMint: inputToken.address,
           outputMint: outputToken.address,
           payer: publicKey.toBase58(),
-          amount: totalAmountInLamports.toString(), // Total amount to deposit
+          amount: totalAmountInLamports.toString(),
           cycleFrequency: Number.parseInt(frequency),
           numberOfOrders: numberOfOrders,
         }),
@@ -172,14 +179,17 @@ export function DCAPanel() {
         throw new Error(data.error || "Failed to create DCA")
       }
 
-      toast.success("DCA order created successfully! Refreshing order list...")
+      toast.success(
+        "DCA order transaction created! The order will appear after blockchain confirmation (may take a few moments).",
+      )
       setShowCreateDialog(false)
       setTotalAmount("")
       setAmountPerCycle("")
 
       setTimeout(() => {
+        console.log("[v0] Refreshing DCA accounts after delay...")
         loadDCAAccounts()
-      }, 2000)
+      }, 5000)
     } catch (error) {
       console.error("[v0] Create DCA error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create DCA")
