@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const orders = await getOpenOrders(wallet)
     return NextResponse.json(orders)
   } catch (error) {
-    console.error("[v0] Limit orders API error:", error)
+    console.error("Limit orders API error:", error)
     return NextResponse.json([])
   }
 }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
-    console.error("[v0] Limit order action error:", error)
+    console.error("Limit order action error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to process limit order" },
       { status: 500 },

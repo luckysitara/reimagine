@@ -32,8 +32,8 @@ export async function createLimitOrder(params: CreateLimitOrderParams): Promise<
       outputMint: params.outputMint,
       maker: params.maker,
       payer: params.payer,
-      makingAmount: params.inAmount,
-      takingAmount: params.outAmount,
+      makingAmount: params.inAmount, // Use makingAmount for amount being traded
+      takingAmount: params.outAmount, // Use takingAmount for amount expected to receive
       expiredAt: params.expiredAt,
     }),
   })
@@ -42,7 +42,7 @@ export async function createLimitOrder(params: CreateLimitOrderParams): Promise<
     const text = await response.text()
     try {
       const error = JSON.parse(text)
-      throw new Error(error.error || `Limit order creation failed: ${response.statusText}`)
+      throw new Error(`Limit order creation failed: ${response.statusText} - ${JSON.stringify(error)}`)
     } catch {
       throw new Error(`Limit order creation failed: ${response.statusText} - ${text}`)
     }
@@ -95,7 +95,7 @@ export async function getOpenOrders(wallet: string): Promise<LimitOrder[]> {
     const data = await response.json()
     return Array.isArray(data) ? data : []
   } catch (error) {
-    console.error("[v0] Get open orders error:", error)
+    console.error("Get open orders error:", error)
     return []
   }
 }

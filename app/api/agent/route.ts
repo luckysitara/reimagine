@@ -236,7 +236,6 @@ export async function POST(request: Request) {
       const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
 
       if (!apiKey || apiKey.trim() === "" || apiKey === "your-api-key-here") {
-        console.error("[v0] Invalid API key:", apiKey ? "present but invalid" : "missing")
         await sendMessage({
           error: "AI service not configured. Please set a valid GOOGLE_GENERATIVE_AI_API_KEY in environment variables.",
         })
@@ -280,7 +279,6 @@ export async function POST(request: Request) {
       })
 
       const lastMessage = messages[messages.length - 1]
-      console.log("[v0] Sending message to Gemini:", lastMessage.content)
 
       let result = await chat.sendMessage(lastMessage.content)
       let response = result.response
@@ -326,7 +324,6 @@ export async function POST(request: Request) {
       }
 
       const text = response.text()
-      console.log("[v0] Final response:", text)
 
       // Send chunks for streaming effect
       const words = text.split(" ")
@@ -341,14 +338,12 @@ export async function POST(request: Request) {
       await sendMessage({ type: "done" })
       await writer.close()
     } catch (error: any) {
-      console.error("[v0] Agent error:", error)
+      console.error("Agent error:", error)
 
       let errorMessage = "Failed to process request"
 
       if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("API key not valid")) {
         errorMessage = "Invalid Google AI API key. Please check your configuration."
-      } else if (error?.message?.includes("quota") || error?.message?.includes("RESOURCE_EXHAUSTED")) {
-        errorMessage = "Google AI API quota exceeded. Please wait a moment and try again."
       } else if (error?.message) {
         errorMessage = error.message
       }

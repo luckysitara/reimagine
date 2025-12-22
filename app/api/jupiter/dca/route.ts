@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const accounts = await getDCAAccounts(wallet)
     return NextResponse.json(accounts)
   } catch (error) {
-    console.error("[v0] DCA API error:", error)
+    console.error("DCA API error:", error)
     return NextResponse.json([])
   }
 }
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
-    console.error("[v0] DCA action error:", error)
+    console.error("DCA action error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to process DCA order" },
       { status: 500 },

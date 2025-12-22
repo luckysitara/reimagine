@@ -28,6 +28,8 @@ export interface DCAAccount {
 }
 
 export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: string }> {
+  const numberOfOrders = Math.floor(Number(params.inAmount) / Number(params.inAmountPerCycle))
+
   const response = await fetch(`${JUPITER_API_URLS.recurring}/createOrder`, {
     method: "POST",
     headers: getJupiterHeaders(),
@@ -40,7 +42,7 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
         recurringType: "time",
         amount: params.inAmountPerCycle,
         frequency: params.cycleFrequency,
-        numberOfOrders: Math.floor(Number(params.inAmount) / Number(params.inAmountPerCycle)),
+        numberOfOrders: numberOfOrders,
       },
     }),
   })
@@ -49,7 +51,7 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
     const text = await response.text()
     try {
       const error = JSON.parse(text)
-      throw new Error(error.error || `DCA creation failed: ${response.statusText}`)
+      throw new Error(`DCA creation failed: ${response.statusText} - ${JSON.stringify(error)}`)
     } catch {
       throw new Error(`DCA creation failed: ${response.statusText} - ${text}`)
     }
@@ -125,7 +127,7 @@ export async function getDCAAccounts(wallet: string): Promise<DCAAccount[]> {
     const data = await response.json()
     return Array.isArray(data) ? data : []
   } catch (error) {
-    console.error("[v0] Get DCA accounts error:", error)
+    console.error("Get DCA accounts error:", error)
     return []
   }
 }
