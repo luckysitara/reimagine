@@ -94,17 +94,44 @@ export function LimitOrdersPanel() {
   }
 
   const handleCreateOrder = async () => {
+    console.log("[v0] Create order clicked")
+
     if (!publicKey || !signTransaction) {
+      console.log("[v0] No wallet connected, showing modal")
       setVisible(true)
       return
     }
 
+    if (!inputAmount || !targetPrice) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    if (Number.parseFloat(inputAmount) <= 0) {
+      toast.error("Input amount must be greater than 0")
+      return
+    }
+
+    if (Number.parseFloat(targetPrice) <= 0) {
+      toast.error("Target price must be greater than 0")
+      return
+    }
+
     setIsCreating(true)
+    console.log("[v0] Creating limit order with:", {
+      inputToken: inputToken.symbol,
+      outputToken: outputToken.symbol,
+      inputAmount,
+      targetPrice,
+    })
+
     try {
       const inAmount = Math.floor(Number.parseFloat(inputAmount) * Math.pow(10, inputToken.decimals))
       const outAmount = Math.floor(
         Number.parseFloat(targetPrice) * inAmount * Math.pow(10, outputToken.decimals - inputToken.decimals),
       )
+
+      console.log("[v0] Calculated amounts:", { inAmount, outAmount })
 
       const response = await fetch("/api/jupiter/limit-orders", {
         method: "POST",
@@ -121,6 +148,7 @@ export function LimitOrdersPanel() {
       })
 
       const data = await response.json()
+      console.log("[v0] API response:", data)
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to create limit order")
@@ -132,7 +160,7 @@ export function LimitOrdersPanel() {
       setTargetPrice("")
       loadOrders()
     } catch (error) {
-      console.error("Create order error:", error)
+      console.error("[v0] Create order error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create limit order")
     } finally {
       setIsCreating(false)

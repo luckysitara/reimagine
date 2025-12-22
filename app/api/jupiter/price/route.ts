@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
     const history = searchParams.get("history")
     const interval = searchParams.get("interval") as "1m" | "5m" | "15m" | "1h" | "4h" | "1d" | null
 
+    console.log("[v0] Price API request:", { mint, mints, history, interval })
+
     if (history && mint) {
       const data = await getPriceHistory(mint, interval || "1h")
       return NextResponse.json(data)
@@ -23,11 +25,23 @@ export async function GET(request: NextRequest) {
     if (mint) {
       const price = await getTokenPrice(mint)
 
+      console.log("[v0] Price result:", price)
+
       if (!price) {
-        return NextResponse.json({ error: "Token price not found or unavailable" }, { status: 404 })
+        return NextResponse.json({
+          data: {
+            [mint]: {
+              id: mint,
+              price: 0,
+              mintSymbol: "UNKNOWN",
+              vsToken: "USDC",
+              vsTokenSymbol: "USDC",
+            },
+          },
+        })
       }
 
-      return NextResponse.json(price)
+      return NextResponse.json({ data: { [mint]: price } })
     }
 
     return NextResponse.json({ error: "Mint address required (use 'mint' or 'ids' parameter)" }, { status: 400 })

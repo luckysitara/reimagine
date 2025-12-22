@@ -16,14 +16,19 @@ export interface PriceHistory {
 
 export async function getTokenPrice(mintAddress: string): Promise<TokenPrice | null> {
   try {
+    console.log("[v0] Fetching price for:", mintAddress)
+
     const response = await fetch(`${JUPITER_API_URLS.price}?ids=${mintAddress}`, {
       headers: getJupiterHeaders(),
     })
+
+    console.log("[v0] Jupiter API response status:", response.status)
 
     if (!response.ok) {
       const contentType = response.headers.get("content-type")
       if (contentType?.includes("application/json")) {
         const error = await response.json()
+        console.error("[v0] Jupiter API error response:", error)
         throw new Error(error.error || error.message || `Failed to fetch token price: ${response.statusText}`)
       }
       throw new Error(`Failed to fetch token price: ${response.statusText}`)
@@ -35,6 +40,7 @@ export async function getTokenPrice(mintAddress: string): Promise<TokenPrice | n
     }
 
     const data = await response.json()
+    console.log("[v0] Jupiter API data:", data)
 
     // Check if data has the expected structure
     if (!data || !data.data || typeof data.data !== "object") {

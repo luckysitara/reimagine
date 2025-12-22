@@ -103,15 +103,48 @@ export function DCAPanel() {
   }
 
   const handleCreateDCA = async () => {
+    console.log("[v0] Create DCA clicked")
+
     if (!publicKey || !signTransaction) {
+      console.log("[v0] No wallet connected, showing modal")
       setVisible(true)
       return
     }
 
+    if (!totalAmount || !amountPerCycle) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    if (Number.parseFloat(totalAmount) <= 0) {
+      toast.error("Total amount must be greater than 0")
+      return
+    }
+
+    if (Number.parseFloat(amountPerCycle) <= 0) {
+      toast.error("Amount per cycle must be greater than 0")
+      return
+    }
+
+    if (Number.parseFloat(amountPerCycle) > Number.parseFloat(totalAmount)) {
+      toast.error("Amount per cycle cannot exceed total amount")
+      return
+    }
+
     setIsCreating(true)
+    console.log("[v0] Creating DCA with:", {
+      inputToken: inputToken.symbol,
+      outputToken: outputToken.symbol,
+      totalAmount,
+      amountPerCycle,
+      frequency,
+    })
+
     try {
       const inAmount = Math.floor(Number.parseFloat(totalAmount) * Math.pow(10, inputToken.decimals))
       const inAmountPerCycle = Math.floor(Number.parseFloat(amountPerCycle) * Math.pow(10, inputToken.decimals))
+
+      console.log("[v0] Calculated amounts:", { inAmount, inAmountPerCycle })
 
       const response = await fetch("/api/jupiter/dca", {
         method: "POST",
@@ -128,6 +161,7 @@ export function DCAPanel() {
       })
 
       const data = await response.json()
+      console.log("[v0] API response:", data)
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to create DCA")
@@ -139,7 +173,7 @@ export function DCAPanel() {
       setAmountPerCycle("")
       loadDCAAccounts()
     } catch (error) {
-      console.error("Create DCA error:", error)
+      console.error("[v0] Create DCA error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create DCA")
     } finally {
       setIsCreating(false)
