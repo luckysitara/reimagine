@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Zap, Loader2, CheckCircle2, ExternalLink, Sparkles } from "lucide-react"
+import { Zap, Loader2, CheckCircle2, ExternalLink, Sparkles, AlertCircle } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Transaction } from "@solana/web3.js"
@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useConnection } from "@solana/wallet-adapter-react"
+import { useSolanaBalance } from "@/hooks/use-solana-balance"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function TokenStudioPanel() {
   const { publicKey, signTransaction } = useWallet()
@@ -23,6 +25,7 @@ export function TokenStudioPanel() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [createdToken, setCreatedToken] = useState<{ mintAddress: string; signature: string } | null>(null)
   const { connection } = useConnection()
+  const { balance, isLoading: isLoadingBalance } = useSolanaBalance()
 
   const [formData, setFormData] = useState({
     name: "",
@@ -88,6 +91,16 @@ export function TokenStudioPanel() {
       toast({
         title: "Wallet Error",
         description: "Your wallet doesn't support transaction signing",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const estimatedFee = 0.1 // Estimated SOL needed for token creation
+    if (balance < estimatedFee) {
+      toast({
+        title: "Insufficient Balance",
+        description: `You need at least ${estimatedFee} SOL to create a token. Your current balance is ${balance.toFixed(4)} SOL.`,
         variant: "destructive",
       })
       return
@@ -170,6 +183,16 @@ export function TokenStudioPanel() {
         </div>
       </CardHeader>
       <CardContent>
+        {publicKey && balance < 0.1 && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Insufficient balance. You need at least 0.1 SOL to create a token. Current balance: {balance.toFixed(4)}{" "}
+              SOL
+            </AlertDescription>
+          </Alert>
+        )}
+
         {createdToken ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-green-500">
@@ -334,6 +357,10 @@ export function TokenStudioPanel() {
                   </span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Your Balance</span>
+                  <span className="font-medium">{isLoadingBalance ? "Loading..." : `${balance.toFixed(4)} SOL`}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Freeze Authority</span>
                   <span className="font-medium">Your Wallet</span>
                 </div>
@@ -343,12 +370,12 @@ export function TokenStudioPanel() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estimated Fee</span>
-                  <span className="font-medium">~0.01 SOL</span>
+                  <span className="font-medium">~0.1 SOL</span>
                 </div>
               </div>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
+            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating || balance < 0.1}>
               {isCreating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -356,6 +383,8 @@ export function TokenStudioPanel() {
                 </>
               ) : !publicKey ? (
                 "Connect Wallet to Create"
+              ) : balance < 0.1 ? (
+                "Insufficient Balance"
               ) : (
                 "Create Token"
               )}

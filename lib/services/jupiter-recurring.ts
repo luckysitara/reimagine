@@ -4,9 +4,9 @@ export interface CreateDCAParams {
   inputMint: string
   outputMint: string
   payer: string
-  inAmount: string
-  inAmountPerCycle: string
-  cycleFrequency: number // in seconds
+  amount: string
+  cycleFrequency: number
+  numberOfOrders: number
   minOutAmountPerCycle?: string
   maxOutAmountPerCycle?: string
   startAt?: number
@@ -28,23 +28,25 @@ export interface DCAAccount {
 }
 
 export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: string }> {
-  const numberOfOrders = Math.floor(Number(params.inAmount) / Number(params.inAmountPerCycle))
+  const requestBody = {
+    user: params.payer,
+    payer: params.payer,
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    params: {
+      recurringType: "time",
+      amount: params.amount,
+      frequency: params.cycleFrequency,
+      numberOfOrders: params.numberOfOrders,
+    },
+  }
+
+  console.log("[v0] Sending DCA request:", requestBody)
 
   const response = await fetch(`${JUPITER_API_URLS.recurring}/createOrder`, {
     method: "POST",
     headers: getJupiterHeaders(),
-    body: JSON.stringify({
-      user: params.payer,
-      payer: params.payer,
-      inputMint: params.inputMint,
-      outputMint: params.outputMint,
-      params: {
-        recurringType: "time",
-        amount: params.inAmountPerCycle,
-        frequency: params.cycleFrequency,
-        numberOfOrders: numberOfOrders,
-      },
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   if (!response.ok) {

@@ -19,6 +19,7 @@ import {
   type JupiterToken,
   type JupiterQuote,
 } from "@/lib/services/jupiter"
+import { useSolanaBalance } from "@/hooks/use-solana-balance"
 
 const DEFAULT_SOL = {
   address: "So11111111111111111111111111111111111111112",
@@ -42,6 +43,7 @@ export function TradingPanel() {
   const { publicKey, signTransaction } = useWallet()
   const { connection } = useConnection()
   const { setVisible } = useWalletModal()
+  const { balance } = useSolanaBalance()
 
   const [tokens, setTokens] = useState<JupiterToken[]>([])
   const [inputToken, setInputToken] = useState<JupiterToken>(DEFAULT_SOL)
@@ -256,7 +258,9 @@ export function TradingPanel() {
                 {inputToken.symbol}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Balance: 0 {inputToken.symbol}</p>
+            <p className="text-xs text-muted-foreground">
+              Balance: {inputToken.symbol === "SOL" ? balance.toFixed(4) : "0"} {inputToken.symbol}
+            </p>
           </div>
 
           <div className="flex justify-center">
@@ -283,7 +287,9 @@ export function TradingPanel() {
                 {outputToken.symbol}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Balance: 0 {outputToken.symbol}</p>
+            <p className="text-xs text-muted-foreground">
+              Balance: {outputToken.symbol === "SOL" ? balance.toFixed(4) : "0"} {outputToken.symbol}
+            </p>
           </div>
 
           {quote && (

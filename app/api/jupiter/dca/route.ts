@@ -24,7 +24,14 @@ export async function POST(request: NextRequest) {
     const { action, ...params } = body
 
     if (action === "create") {
-      const result = await createDCAOrder(params)
+      const result = await createDCAOrder({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        payer: params.payer,
+        amount: params.amount,
+        cycleFrequency: params.cycleFrequency,
+        numberOfOrders: params.numberOfOrders,
+      })
       return NextResponse.json(result)
     } else if (action === "close") {
       const result = await closeDCAOrder(params.dcaPubkey, params.user)

@@ -5,8 +5,8 @@ export interface CreateLimitOrderParams {
   outputMint: string
   maker: string
   payer: string
-  inAmount: string
-  outAmount: string
+  makingAmount: string
+  takingAmount: string
   expiredAt?: number
 }
 
@@ -24,18 +24,24 @@ export interface LimitOrder {
 }
 
 export async function createLimitOrder(params: CreateLimitOrderParams): Promise<{ tx: string }> {
+  const requestBody = {
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    maker: params.maker,
+    payer: params.payer,
+    params: {
+      makingAmount: params.makingAmount,
+      takingAmount: params.takingAmount,
+      expiredAt: params.expiredAt,
+    },
+  }
+
+  console.log("[v0] Sending limit order request:", requestBody)
+
   const response = await fetch(`${JUPITER_API_URLS.trigger}/createOrder`, {
     method: "POST",
     headers: getJupiterHeaders(),
-    body: JSON.stringify({
-      inputMint: params.inputMint,
-      outputMint: params.outputMint,
-      maker: params.maker,
-      payer: params.payer,
-      makingAmount: params.inAmount, // Use makingAmount for amount being traded
-      takingAmount: params.outAmount, // Use takingAmount for amount expected to receive
-      expiredAt: params.expiredAt,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   if (!response.ok) {

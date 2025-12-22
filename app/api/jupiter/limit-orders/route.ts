@@ -24,7 +24,15 @@ export async function POST(request: NextRequest) {
     const { action, ...params } = body
 
     if (action === "create") {
-      const result = await createLimitOrder(params)
+      const result = await createLimitOrder({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        maker: params.maker,
+        payer: params.payer,
+        makingAmount: params.makingAmount,
+        takingAmount: params.takingAmount,
+        expiredAt: params.expiredAt,
+      })
       return NextResponse.json(result)
     } else if (action === "cancel") {
       const result = await cancelLimitOrder(params.orderPubkey, params.maker)

@@ -141,10 +141,11 @@ export function DCAPanel() {
     })
 
     try {
-      const inAmount = Math.floor(Number.parseFloat(totalAmount) * Math.pow(10, inputToken.decimals))
-      const inAmountPerCycle = Math.floor(Number.parseFloat(amountPerCycle) * Math.pow(10, inputToken.decimals))
+      const amountPerCycleInLamports = Math.floor(Number.parseFloat(amountPerCycle) * Math.pow(10, inputToken.decimals))
+      const totalAmountInLamports = Math.floor(Number.parseFloat(totalAmount) * Math.pow(10, inputToken.decimals))
+      const numberOfOrders = Math.floor(totalAmountInLamports / amountPerCycleInLamports)
 
-      console.log("[v0] Calculated amounts:", { inAmount, inAmountPerCycle })
+      console.log("[v0] Calculated amounts:", { amountPerCycleInLamports, numberOfOrders })
 
       const response = await fetch("/api/jupiter/dca", {
         method: "POST",
@@ -154,9 +155,9 @@ export function DCAPanel() {
           inputMint: inputToken.address,
           outputMint: outputToken.address,
           payer: publicKey.toBase58(),
-          inAmount: inAmount.toString(),
-          inAmountPerCycle: inAmountPerCycle.toString(),
+          amount: amountPerCycleInLamports.toString(),
           cycleFrequency: Number.parseInt(frequency),
+          numberOfOrders: numberOfOrders,
         }),
       })
 

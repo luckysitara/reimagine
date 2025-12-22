@@ -142,8 +142,9 @@ export function LimitOrdersPanel() {
           outputMint: outputToken.address,
           maker: publicKey.toBase58(),
           payer: publicKey.toBase58(),
-          inAmount: inAmount.toString(),
-          outAmount: outAmount.toString(),
+          makingAmount: inAmount.toString(),
+          takingAmount: outAmount.toString(),
+          expiredAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days expiry
         }),
       })
 
