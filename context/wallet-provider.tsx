@@ -15,16 +15,17 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
   const network = (process.env.NEXT_PUBLIC_SOLANA_NETWORK as WalletAdapterNetwork) || WalletAdapterNetwork.Mainnet
 
   const endpoint = useMemo(() => {
-    const heliusEndpoint = process.env.NEXT_PUBLIC_HELIUS_RPC_URL
-
-    if (!heliusEndpoint) {
-      console.error("[v0] NEXT_PUBLIC_HELIUS_RPC_URL not configured! Please set the environment variable.")
-      throw new Error("NEXT_PUBLIC_HELIUS_RPC_URL environment variable is required")
+    if (typeof window !== "undefined") {
+      // Client-side: use the proxy with full URL
+      const proxyEndpoint = `${window.location.origin}/api/solana/rpc`
+      console.log("[v0] Using secure Helius RPC proxy for wallet operations")
+      return proxyEndpoint
     }
 
-    console.log("[v0] Using Helius RPC for wallet operations")
-    return heliusEndpoint
-  }, [])
+    // Server-side/build-time: use a valid placeholder URL that will be replaced
+    // This prevents the "Endpoint URL must start with http: or https:" error during build
+    return "https://api.mainnet-beta.solana.com"
+  }, [network])
 
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter(), new BackpackWalletAdapter()],

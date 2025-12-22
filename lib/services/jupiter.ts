@@ -34,6 +34,9 @@ export interface JupiterQuote {
   priceImpactPct: string
   requestId: string
   transaction: string
+  error?: string
+  errorMessage?: string
+  errorCode?: number
 }
 
 export interface SwapResult {
@@ -114,8 +117,9 @@ export async function getJupiterQuote(
   taker?: string,
 ): Promise<JupiterQuote> {
   try {
-    // Ultra API requires taker address, use a fallback if not provided
-    const takerAddress = taker || "11111111111111111111111111111111"
+    if (!taker) {
+      throw new Error("Wallet address is required. Please connect your wallet to get quotes.")
+    }
 
     const url =
       `/api/jupiter/order?` +
@@ -123,24 +127,41 @@ export async function getJupiterQuote(
       `outputMint=${outputMint}&` +
       `amount=${amount}&` +
       `slippageBps=${slippageBps}&` +
-      `taker=${takerAddress}`
+      `taker=${taker}`
 
     console.log("[v0] Fetching Jupiter Ultra order:", url)
 
     const response = await fetch(url)
+
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Order failed: ${error}`)
+      const errorData = await response.json()
+      const errorMsg = errorData.error || errorData.details?.errorMessage || `HTTP ${response.status}`
+
+      if (errorMsg.includes("Insufficient funds")) {
+        throw new Error(
+          "Insufficient balance for this swap. Please reduce the amount or add more funds to your wallet.",
+        )
+      }
+
+      throw new Error(errorMsg)
     }
 
     const order = await response.json()
     console.log("[v0] Jupiter Ultra order received - has transaction:", !!order.transaction)
 
+    if (order.error || order.errorMessage) {
+      const errorMsg = order.errorMessage || order.error
+
+      if (errorMsg.includes("Insufficient funds") || order.errorCode === 1) {
+        throw new Error("Insufficient balance for this swap (including fees). Please reduce the amount.")
+      }
+
+      throw new Error(errorMsg)
+    }
+
     if (!order.transaction) {
       console.error("[v0] Order response missing transaction field. Response keys:", Object.keys(order))
-      throw new Error(
-        "Jupiter API response is missing the transaction field. This may indicate an API configuration issue.",
-      )
+      throw new Error("No valid swap route found for this token pair. The tokens may not have sufficient liquidity.")
     }
 
     return order
@@ -151,7 +172,6 @@ export async function getJupiterQuote(
 }
 
 export async function getJupiterSwapTransaction(quoteResponse: JupiterQuote, userPublicKey: string): Promise<string> {
-  // Ultra API already includes the transaction in the order response
   return quoteResponse.transaction
 }
 
@@ -176,8 +196,8 @@ export async function getJupiterOrder(
     const response = await fetch(url)
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Order failed: ${error}`)
+      const errorData = await response.json()
+      throw new Error(errorData.error || `HTTP ${response.status}`)
     }
 
     const order = await response.json()
@@ -233,7 +253,6 @@ export async function executeSwap(
 
     console.log("[v0] Deserializing transaction (length:", swapTransaction.length, ")...")
 
-    // Deserialize the transaction from base64
     let transactionBuf: Buffer
     try {
       transactionBuf = Buffer.from(swapTransaction, "base64")
@@ -261,7 +280,6 @@ export async function executeSwap(
 
     console.log("[v0] Requesting signature from wallet...")
 
-    // Sign the transaction using wallet
     let signedTransaction: VersionedTransaction
     try {
       signedTransaction = await signTransaction(transaction)
@@ -274,10 +292,8 @@ export async function executeSwap(
       throw new Error("Failed to sign transaction")
     }
 
-    // Serialize the signed transaction to base64
     const signedTransactionBase64 = Buffer.from(signedTransaction.serialize()).toString("base64")
 
-    // If we have a requestId, use the Ultra API execute endpoint
     if (requestId) {
       console.log("[v0] Executing via Ultra API with requestId:", requestId)
 
@@ -307,7 +323,6 @@ export async function executeSwap(
       }
     }
 
-    // Otherwise, send directly to the network
     console.log("[v0] Sending transaction directly to Solana network...")
 
     const rawTransaction = signedTransaction.serialize()
@@ -319,7 +334,6 @@ export async function executeSwap(
 
     console.log("[v0] Transaction sent:", signature)
 
-    // Confirm the transaction
     const latestBlockhash = await connection.getLatestBlockhash("confirmed")
     await connection.confirmTransaction(
       {
@@ -343,11 +357,11 @@ export async function executeSwap(
 
     if (errorMessage.includes("User rejected") || errorMessage.includes("cancelled")) {
       return { success: false, error: "Transaction cancelled by user" }
-    } else if (errorMessage.includes("insufficient")) {
-      return { success: false, error: "Insufficient balance for transaction" }
+    } else if (errorMessage.includes("Insufficient") || errorMessage.includes("insufficient")) {
+      return { success: false, error: "Insufficient balance for transaction (including network fees)" }
     } else if (errorMessage.includes("deserialize") || errorMessage.includes("buffer")) {
       return { success: false, error: "Invalid transaction format from Jupiter API" }
-    } else if (errorMessage.includes("missing")) {
+    } else if (errorMessage.includes("missing") || errorMessage.includes("empty")) {
       return { success: false, error: "Transaction data is missing from API response" }
     }
 

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Zap, Loader2, CheckCircle2, ExternalLink } from "lucide-react"
+import { Zap, Loader2, CheckCircle2, ExternalLink, Sparkles } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Transaction } from "@solana/web3.js"
@@ -20,6 +20,7 @@ export function TokenStudioPanel() {
   const { setVisible } = useWalletModal()
   const { toast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [createdToken, setCreatedToken] = useState<{ mintAddress: string; signature: string } | null>(null)
   const { connection } = useConnection()
 
@@ -29,7 +30,51 @@ export function TokenStudioPanel() {
     decimals: "9",
     supply: "",
     description: "",
+    imageUrl: "",
   })
+
+  const handleGenerateImage = async () => {
+    if (!formData.description) {
+      toast({
+        title: "Description Required",
+        description: "Please add a description to generate an image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsGeneratingImage(true)
+
+    try {
+      const response = await fetch("/api/token/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: formData.description }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate image")
+      }
+
+      setFormData({ ...formData, imageUrl: data.imageUrl })
+
+      toast({
+        title: "Image Generated",
+        description: "AI-generated token image ready",
+      })
+    } catch (error) {
+      console.error("[v0] Image generation error:", error)
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Failed to generate image",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,9 +97,6 @@ export function TokenStudioPanel() {
     setCreatedToken(null)
 
     try {
-      console.log("[v0] Creating token:", formData)
-
-      // Call API to prepare transaction
       const response = await fetch("/api/token/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,31 +109,24 @@ export function TokenStudioPanel() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create token")
+        throw new Error(data.error || data.details || "Failed to create token")
       }
 
-      console.log("[v0] Token creation response:", data)
-
-      // Deserialize and sign transaction
       const transaction = Transaction.from(Buffer.from(data.transaction, "base64"))
 
-      console.log("[v0] Signing transaction...")
       const signedTransaction = await signTransaction(transaction)
 
-      console.log("[v0] Sending transaction...")
-
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize())
-      console.log("[v0] Transaction sent:", signature)
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      })
 
       toast({
         title: "Transaction Sent",
         description: "Confirming your token creation...",
       })
 
-      // Wait for confirmation
       await connection.confirmTransaction(signature, "confirmed")
-
-      console.log("[v0] Token created successfully!")
 
       setCreatedToken({
         mintAddress: data.mintAddress,
@@ -103,13 +138,13 @@ export function TokenStudioPanel() {
         description: `${formData.symbol} has been successfully created`,
       })
 
-      // Reset form
       setFormData({
         name: "",
         symbol: "",
         decimals: "9",
         supply: "",
         description: "",
+        imageUrl: "",
       })
     } catch (error) {
       console.error("[v0] Token creation error:", error)
@@ -251,6 +286,42 @@ export function TokenStudioPanel() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imageUrl">Token Image</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="imageUrl"
+                  placeholder="https://example.com/image.png or leave empty"
+                  value={formData.imageUrl}
+                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGenerateImage}
+                  disabled={isGeneratingImage || !formData.description}
+                >
+                  {isGeneratingImage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      AI Generate
+                    </>
+                  )}
+                </Button>
+              </div>
+              {formData.imageUrl && (
+                <div className="mt-2 rounded-lg border border-border p-2">
+                  <img
+                    src={formData.imageUrl || "/placeholder.svg"}
+                    alt="Token preview"
+                    className="h-20 w-20 rounded-lg object-cover"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">

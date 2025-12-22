@@ -29,6 +29,10 @@ export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> 
     throw new Error("Wallet address is required for swap preparation")
   }
 
+  if (amount <= 0) {
+    throw new Error("Amount must be greater than 0")
+  }
+
   // Get token list
   const tokens = await getJupiterTokenList()
 
@@ -40,8 +44,23 @@ export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> 
     throw new Error(`Token not found: ${!inputTokenData ? inputToken : outputToken}`)
   }
 
+  if (inputTokenData.address === outputTokenData.address) {
+    throw new Error("Cannot swap a token for itself")
+  }
+
   // Convert amount to lamports based on decimals
   const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputTokenData.decimals))
+
+  if (amountInSmallestUnit <= 0) {
+    throw new Error("Amount is too small for this token's decimal precision")
+  }
+
+  console.log("[v0] Preparing swap:", {
+    input: `${amount} ${inputToken} (${inputTokenData.address})`,
+    output: outputToken,
+    amountInSmallestUnit,
+    wallet: walletAddress,
+  })
 
   const order = await getJupiterQuote(
     inputTokenData.address,
@@ -53,6 +72,10 @@ export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> 
 
   // Calculate estimated output
   const estimatedOutput = Number.parseInt(order.outAmount) / Math.pow(10, outputTokenData.decimals)
+
+  if (!order.transaction) {
+    throw new Error("Jupiter API did not return a valid transaction. The swap may not be possible at this time.")
+  }
 
   return {
     quote: {

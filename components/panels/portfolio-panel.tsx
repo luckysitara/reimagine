@@ -144,7 +144,7 @@ export function PortfolioPanel() {
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
                   <AvatarImage
-                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                    src="/images/design-mode/logo.png"
                     alt="SOL"
                   />
                   <AvatarFallback>SOL</AvatarFallback>

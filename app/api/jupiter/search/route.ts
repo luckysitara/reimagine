@@ -8,8 +8,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get("query")
 
-    if (!query) {
-      return NextResponse.json({ error: "Query parameter required" }, { status: 400 })
+    if (!query || query.trim() === "") {
+      console.log("[v0] Empty search query, returning empty results")
+      return NextResponse.json([])
     }
 
     const headers: HeadersInit = {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, ArrowLeftRight, Wallet, TrendingUp, Coins, ImageIcon, Target, Bot, Zap } from "lucide-react"
+import { Sparkles, ArrowLeftRight, Wallet, ImageIcon, Target, Bot, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navigation = [
@@ -9,8 +9,6 @@ const navigation = [
   { name: "Swap", icon: ArrowLeftRight, href: "#swap", section: "Trading" },
   { name: "Portfolio", icon: Wallet, href: "#portfolio", section: "Portfolio" },
   { name: "NFTs", icon: ImageIcon, href: "#nfts", section: "Portfolio" },
-  { name: "Yield", icon: TrendingUp, href: "#yield", section: "DeFi" },
-  { name: "Staking", icon: Coins, href: "#staking", section: "DeFi" },
   { name: "Token Studio", icon: Zap, href: "#studio", section: "Advanced" },
   { name: "Goals", icon: Target, href: "#goals", section: "Automation" },
   { name: "Autopilot", icon: Bot, href: "#autopilot", section: "Automation" },

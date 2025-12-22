@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowDownUp, Settings, Loader2 } from "lucide-react"
+import { ArrowDownUp, Settings, Loader2, AlertCircle } from "lucide-react"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { TokenSearchDialog } from "@/components/trading/token-search-dialog"
 import {
@@ -52,8 +53,8 @@ export function TradingPanel() {
   const [isSwapping, setIsSwapping] = useState(false)
   const [showInputTokenDialog, setShowInputTokenDialog] = useState(false)
   const [showOutputTokenDialog, setShowOutputTokenDialog] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
 
-  // Load token list
   useEffect(() => {
     getJupiterTokenList()
       .then(setTokens)
@@ -63,11 +64,18 @@ export function TradingPanel() {
       })
   }, [])
 
-  // Fetch quote when amount changes
   useEffect(() => {
     if (!inputAmount || Number.parseFloat(inputAmount) <= 0) {
       setQuote(null)
       setOutputAmount("")
+      setQuoteError(null)
+      return
+    }
+
+    if (!publicKey) {
+      setQuote(null)
+      setOutputAmount("")
+      setQuoteError("Connect your wallet to get quotes")
       return
     }
 
@@ -77,22 +85,56 @@ export function TradingPanel() {
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputAmount, inputToken, outputToken])
+  }, [inputAmount, inputToken, outputToken, publicKey])
 
   const fetchQuote = async () => {
+    if (!publicKey) {
+      toast.error("Please connect your wallet to get quotes")
+      return
+    }
+
     try {
       setIsLoadingQuote(true)
+      setQuoteError(null)
       const amount = Math.floor(Number.parseFloat(inputAmount) * Math.pow(10, inputToken.decimals))
 
-      const quoteResponse = await getJupiterQuote(inputToken.address, outputToken.address, amount)
+      console.log("[v0] Fetching Jupiter Ultra order for:", {
+        input: inputToken.symbol,
+        output: outputToken.symbol,
+        amount,
+        wallet: publicKey.toBase58(),
+      })
+
+      const quoteResponse = await getJupiterQuote(
+        inputToken.address,
+        outputToken.address,
+        amount,
+        100,
+        publicKey.toBase58(),
+      )
 
       setQuote(quoteResponse)
       const output = Number.parseInt(quoteResponse.outAmount) / Math.pow(10, outputToken.decimals)
       setOutputAmount(output.toFixed(6))
+      setQuoteError(null)
     } catch (error) {
       console.error("[v0] Quote error:", error)
       setQuote(null)
       setOutputAmount("")
+
+      if (error instanceof Error) {
+        if (error.message.includes("Insufficient")) {
+          setQuoteError(`Insufficient ${inputToken.symbol} balance. Please reduce the amount or add more funds.`)
+        } else if (error.message.includes("liquidity")) {
+          setQuoteError(`No liquidity available for this ${inputToken.symbol}/${outputToken.symbol} pair.`)
+        } else if (error.message.includes("swap route")) {
+          setQuoteError(`No swap route found. Try a different token pair or smaller amount.`)
+        } else {
+          setQuoteError(error.message)
+        }
+      } else {
+        setQuoteError("Failed to get quote. Please try again.")
+      }
     } finally {
       setIsLoadingQuote(false)
     }
@@ -113,18 +155,26 @@ export function TradingPanel() {
       setIsSwapping(true)
       toast.loading("Preparing swap transaction...")
 
-      console.log("[v0] Starting swap with quote:", quote)
+      console.log("[v0] Starting swap with quote:", {
+        inputMint: quote.inputMint,
+        outputMint: quote.outputMint,
+        inAmount: quote.inAmount,
+        outAmount: quote.outAmount,
+        hasTransaction: !!quote.transaction,
+        requestId: quote.requestId,
+      })
 
       toast.loading("Waiting for wallet signature...")
 
-      // Execute the swap with the transaction and requestId from the quote
       const result = await executeSwap(connection, quote.transaction, signTransaction, quote.requestId)
 
       if (result.success) {
         toast.success("Swap successful!", {
           description: (
             <a
-              href={`https://solscan.io/tx/${result.signature}`}
+              href={`https://solscan.io/tx/${result.signature}${
+                process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
+              }`}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
@@ -136,6 +186,7 @@ export function TradingPanel() {
         setInputAmount("")
         setOutputAmount("")
         setQuote(null)
+        setQuoteError(null)
       } else {
         toast.error(result.error || "Swap failed")
       }
@@ -153,6 +204,7 @@ export function TradingPanel() {
     setInputAmount(outputAmount)
     setOutputAmount("")
     setQuote(null)
+    setQuoteError(null)
   }
 
   const priceImpact = quote ? Number.parseFloat(quote.priceImpactPct) : 0
@@ -173,6 +225,13 @@ export function TradingPanel() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {quoteError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{quoteError}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-2">
             <Label>You Pay</Label>
             <div className="flex gap-2">
@@ -238,12 +297,20 @@ export function TradingPanel() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Price Impact</span>
-                <span className={`font-medium ${priceImpactColor}`}>{priceImpact.toFixed(2)}%</span>
+                <span className={`font-medium ${priceImpactColor}`}>{Math.abs(priceImpact).toFixed(2)}%</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Network Fee</span>
                 <span className="font-medium">~0.00005 SOL</span>
               </div>
+              {Math.abs(priceImpact) > 3 && (
+                <Alert variant="default" className="mt-2 border-amber-500/50 bg-amber-500/10">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <AlertDescription className="text-xs">
+                    High price impact! Consider reducing the amount.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
@@ -251,7 +318,7 @@ export function TradingPanel() {
             className="w-full"
             size="lg"
             onClick={handleSwap}
-            disabled={!publicKey || !quote || isSwapping || isLoadingQuote}
+            disabled={!publicKey || !quote || isSwapping || isLoadingQuote || !!quoteError}
           >
             {isSwapping ? (
               <>
@@ -265,6 +332,8 @@ export function TradingPanel() {
               </>
             ) : !publicKey ? (
               "Connect Wallet to Swap"
+            ) : quoteError ? (
+              "Cannot Swap"
             ) : !quote ? (
               "Enter Amount"
             ) : (

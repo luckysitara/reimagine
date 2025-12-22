@@ -5,8 +5,6 @@ import {
   Sparkles,
   ArrowLeftRight,
   Wallet,
-  TrendingUp,
-  Coins,
   ImageIcon,
   Target,
   Bot,
@@ -14,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Repeat,
+  TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -22,12 +22,12 @@ const navigation = [
   { name: "Swap", icon: ArrowLeftRight, href: "#swap" },
   { name: "AI Copilot", icon: Sparkles, href: "#copilot" },
   { name: "Portfolio", icon: Wallet, href: "#portfolio" },
-  { name: "Yield", icon: TrendingUp, href: "#yield" },
-  { name: "Staking", icon: Coins, href: "#staking" },
+  { name: "Limit Orders", icon: Target, href: "#limit-orders" },
+  { name: "DCA", icon: Repeat, href: "#dca" },
   { name: "NFTs", icon: ImageIcon, href: "#nfts" },
   { name: "Token Studio", icon: Zap, href: "#studio" },
   { name: "Autopilot", icon: Bot, href: "#autopilot" },
-  { name: "Goals", icon: Target, href: "#goals" },
+  { name: "Goals", icon: TrendingUp, href: "#goals" },
 ]
 
 interface CollapsibleSidebarProps {
@@ -87,7 +87,7 @@ export function CollapsibleSidebar({ activePanel, onPanelChange, onCollapseChang
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-1 p-3 overflow-y-auto h-[calc(100vh-8rem)]">
           {navigation.map((item) => {
             const Icon = item.icon
             const isActive = activePanel === item.name

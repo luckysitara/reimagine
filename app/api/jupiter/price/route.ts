@@ -1,0 +1,41 @@
+import { type NextRequest, NextResponse } from "next/server"
+import { getTokenPrice, getMultipleTokenPrices, getPriceHistory } from "@/lib/services/jupiter-price"
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const mint = searchParams.get("mint") || searchParams.get("ids")
+    const mints = searchParams.get("mints")
+    const history = searchParams.get("history")
+    const interval = searchParams.get("interval") as "1m" | "5m" | "15m" | "1h" | "4h" | "1d" | null
+
+    if (history && mint) {
+      const data = await getPriceHistory(mint, interval || "1h")
+      return NextResponse.json(data)
+    }
+
+    if (mints) {
+      const mintArray = mints.split(",")
+      const prices = await getMultipleTokenPrices(mintArray)
+      return NextResponse.json(prices)
+    }
+
+    if (mint) {
+      const price = await getTokenPrice(mint)
+
+      if (!price) {
+        return NextResponse.json({ error: "Token price not found or unavailable" }, { status: 404 })
+      }
+
+      return NextResponse.json(price)
+    }
+
+    return NextResponse.json({ error: "Mint address required (use 'mint' or 'ids' parameter)" }, { status: 400 })
+  } catch (error) {
+    console.error("[v0] Price API error:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to fetch price data" },
+      { status: 500 },
+    )
+  }
+}

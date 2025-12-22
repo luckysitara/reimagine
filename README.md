@@ -185,7 +185,7 @@ Create your own SPL tokens in minutes:
         │                    │
         └─────────┬──────────┘
                   │
-        ┌─────────▼──────────────────┐
+        ┌─────────┴──────────────────┐
         │  Transaction Orchestration  │
         │                            │
         │  ┌──────────────────────┐ │
@@ -283,7 +283,7 @@ Create your own SPL tokens in minutes:
 - **Solana Wallet**: Phantom, Solflare, or Backpack browser extension
 - **API Keys**: 
   - [Helius API Key](https://dev.helius.xyz/) (Required for RPC access)
-  - [Google Gemini API Key](https://ai.google.dev/) (Required for AI features)
+  - [Google Gemini API Key](https://ai.google.dev/) (Optional for AI features)
   - [Jupiter API Key](https://portal.jup.ag) (Optional but Recommended)
 
 ### Quick Start
@@ -300,7 +300,7 @@ npm install
 cp .env.example .env.local
 
 # Add your API keys to .env.local
-# NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+# NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
 # HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 # GOOGLE_GENERATIVE_AI_API_KEY=YOUR_KEY
 # JUPITER_API_KEY=YOUR_KEY
@@ -339,80 +339,65 @@ npm run type-check
 Create a `.env.local` file in the root directory:
 
 ```bash
-# ============================================
-# Solana RPC Configuration
-# ============================================
-
-# NEXT_PUBLIC_HELIUS_RPC_URL (Required for client-side wallet operations)
-# Get your API key at: https://dev.helius.xyz/
-# Free tier: 100k credits/day
-NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=your_api_key_here
-
-# HELIUS_RPC_URL (Required for server-side operations - keeps API key secure)
-# Use the same Helius API key as above
-HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=your_api_key_here
-
-# Network Selection (mainnet-beta or devnet)
+# =============================================================================
+# SOLANA NETWORK CONFIGURATION
+# =============================================================================
 NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
 
-# ============================================
-# AI Configuration
-# ============================================
+# =============================================================================
+# HELIUS RPC CONFIGURATION (REQUIRED)
+# =============================================================================
+# Server-side Helius RPC URL - SECURE (API key NOT exposed to client)
+# Get your API key at: https://dev.helius.xyz/
+HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_API_KEY
 
-# GOOGLE_GENERATIVE_AI_API_KEY (Required for AI Copilot)
-# Get your API key at: https://ai.google.dev/
-# Free tier: 60 requests/minute
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
+# IMPORTANT: Do NOT set NEXT_PUBLIC_HELIUS_RPC_URL
+# The app uses a secure server-side proxy to protect your API key
 
-# ============================================
-# Jupiter API Configuration
-# ============================================
+# =============================================================================
+# AI CONFIGURATION (OPTIONAL)
+# =============================================================================
+# Google Gemini API Key for AI Copilot features
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key_here
 
-# Jupiter API Key (Optional but Recommended)
-# Get your free API key at: https://portal.jup.ag
-# Provides higher rate limits and priority access
+# =============================================================================
+# JUPITER API CONFIGURATION (OPTIONAL)
+# =============================================================================
+# Jupiter API Key for higher rate limits
 JUPITER_API_KEY=your_jupiter_api_key_here
-
-# ============================================
-# Feature Flags (Optional)
-# ============================================
-
-# Enable devnet redirect for development
-NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000
 ```
 
 ### Getting API Keys
 
-#### 1. Helius API Key
+#### 1. Helius API Key (Required)
 1. Visit [https://dev.helius.xyz/](https://dev.helius.xyz/)
 2. Sign up for a free account
 3. Create a new project
 4. Copy your API key
-5. Add to `.env.local`:
-   - `NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
-   - `HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+5. Add to `.env.local`: `HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
 
-**Note**: You need both environment variables - `NEXT_PUBLIC_HELIUS_RPC_URL` for client-side wallet operations and `HELIUS_RPC_URL` for secure server-side operations.
+**Free Tier**: 100,000 credits/day
 
-**Free Tier**: 100,000 credits/day (sufficient for testing and development)
-
-#### 2. Google Gemini API Key
+#### 2. Google Gemini API Key (Optional - for AI Copilot)
 1. Visit [https://ai.google.dev/](https://ai.google.dev/)
-2. Click "Get API Key" → "Create API key in new project"
-3. Copy your API key
+2. Click "Get API Key in Google AI Studio"
+3. Create API key
 4. Add to `.env.local`: `GOOGLE_GENERATIVE_AI_API_KEY=YOUR_KEY`
 
 **Free Tier**: 60 requests/minute, 1500 requests/day
 
-#### 3. Jupiter API Key (Optional)
+#### 3. Jupiter API Key (Optional - for better rate limits)
 1. Visit [https://portal.jup.ag](https://portal.jup.ag)
-2. Sign up for a free account
-3. Create a new API key
-4. Copy your API key
-5. Add to `.env.local`: `JUPITER_API_KEY=YOUR_KEY`
+2. Sign up and create API key
+3. Add to `.env.local`: `JUPITER_API_KEY=YOUR_KEY`
 
-**Benefits**: Higher rate limits, priority access to Jupiter Ultra API features (search, holdings, shield)
-**Free Tier**: Generous limits for personal and development use
+### Security Architecture
+
+🔒 **API Key Protection**: The app uses a secure proxy pattern:
+- Your Helius API key is NEVER exposed to the browser
+- All RPC calls go through `/api/solana/rpc` server endpoint
+- API key is only used server-side
+- No risk of API key theft from client-side code
 
 ---
 

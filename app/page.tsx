@@ -5,11 +5,11 @@ import { Header } from "@/components/header"
 import { CollapsibleSidebar } from "@/components/collapsible-sidebar"
 import { TradingPanel } from "@/components/panels/trading-panel"
 import { PortfolioPanel } from "@/components/panels/portfolio-panel"
-import { StakingPanel } from "@/components/panels/staking-panel"
-import { YieldPanel } from "@/components/panels/yield-panel"
 import { NFTPanel } from "@/components/panels/nft-panel"
 import { TokenStudioPanel } from "@/components/panels/token-studio-panel"
 import { TradingBotPanel } from "@/components/panels/trading-bot-panel"
+import { LimitOrdersPanel } from "@/components/panels/limit-orders-panel"
+import { DCAPanel } from "@/components/panels/dca-panel"
 import { SolanaCopilot } from "@/components/solana-copilot"
 
 export default function Page() {
@@ -24,14 +24,14 @@ export default function Page() {
         return <SolanaCopilot />
       case "Portfolio":
         return <PortfolioPanel />
-      case "Yield":
-        return <YieldPanel />
-      case "Staking":
-        return <StakingPanel />
       case "NFTs":
         return <NFTPanel />
       case "Token Studio":
         return <TokenStudioPanel />
+      case "Limit Orders":
+        return <LimitOrdersPanel />
+      case "DCA":
+        return <DCAPanel />
       case "Autopilot":
         return <TradingBotPanel />
       case "Goals":

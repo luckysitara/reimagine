@@ -12,8 +12,6 @@ export async function GET(request: Request) {
     const amount = searchParams.get("amount")
     const slippageBps = searchParams.get("slippageBps") || "100"
     const taker = searchParams.get("taker")
-    const referralAccount = searchParams.get("referralAccount")
-    const referralFee = searchParams.get("referralFee")
 
     if (!inputMint || !outputMint || !amount || !taker) {
       return NextResponse.json(
@@ -22,23 +20,7 @@ export async function GET(request: Request) {
       )
     }
 
-    let url =
-      `${JUPITER_ULTRA_API}/order?` +
-      `inputMint=${inputMint}&` +
-      `outputMint=${outputMint}&` +
-      `amount=${amount}&` +
-      `taker=${taker}&` +
-      `slippageBps=${slippageBps}`
-
-    // Add optional referral parameters
-    if (referralAccount) {
-      url += `&referralAccount=${referralAccount}`
-    }
-    if (referralFee) {
-      url += `&referralFee=${referralFee}`
-    }
-
-    console.log("[v0] Proxying Jupiter Ultra order request to:", url)
+    const url = `${JUPITER_ULTRA_API}/order?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&taker=${taker}&slippageBps=${slippageBps}`
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 15000)
@@ -68,12 +50,47 @@ export async function GET(request: Request) {
 
     const order = await response.json()
 
-    console.log("[v0] Jupiter Ultra order response keys:", Object.keys(order))
-    console.log("[v0] Transaction field present:", !!order.transaction)
-    if (order.transaction) {
-      console.log("[v0] Transaction field length:", order.transaction.length)
-    } else {
-      console.error("[v0] WARNING: Transaction field is missing from Jupiter response!")
+    if (order.error) {
+      console.error("[v0] Jupiter returned error:", order.error, order.errorMessage)
+
+      // Handle specific error cases
+      if (order.errorCode === 1 || order.errorMessage?.includes("Insufficient funds")) {
+        return NextResponse.json(
+          {
+            error: "Insufficient funds. Your wallet doesn't have enough balance for this swap (including fees).",
+            details: order,
+          },
+          { status: 400 },
+        )
+      }
+
+      return NextResponse.json(
+        {
+          error: order.errorMessage || order.error || "Jupiter API returned an error",
+          details: order,
+        },
+        { status: 400 },
+      )
+    }
+
+    if (!order.transaction || order.transaction === "") {
+      console.error("[v0] Jupiter response missing or empty transaction field")
+      console.error("[v0] Response details:", {
+        hasTransaction: !!order.transaction,
+        transactionLength: order.transaction?.length || 0,
+        error: order.error,
+        errorMessage: order.errorMessage,
+        errorCode: order.errorCode,
+      })
+
+      return NextResponse.json(
+        {
+          error:
+            "Jupiter API did not return a transaction. This may indicate insufficient funds, unavailable swap path, or invalid parameters.",
+          details: order,
+        },
+        { status: 400 },
+      )
     }
 
     return NextResponse.json(order, {
@@ -85,10 +102,7 @@ export async function GET(request: Request) {
     console.error("[v0] Jupiter Ultra order proxy error:", error)
 
     if (error instanceof Error && error.name === "AbortError") {
-      return NextResponse.json(
-        { error: "Request timeout - Jupiter API is taking too long to respond" },
-        { status: 504 },
-      )
+      return NextResponse.json({ error: "Request timeout" }, { status: 504 })
     }
 
     return NextResponse.json(

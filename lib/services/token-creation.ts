@@ -1,4 +1,4 @@
-import { type Connection, Keypair, type PublicKey, Transaction } from "@solana/web3.js"
+import { type Connection, Keypair, type PublicKey, Transaction, SystemProgram } from "@solana/web3.js"
 import {
   createInitializeMintInstruction,
   createAssociatedTokenAccountInstruction,
@@ -15,7 +15,7 @@ export interface TokenCreationParams {
   decimals: number
   supply: number
   description?: string
-  logoFile?: File
+  imageUrl?: string
 }
 
 export interface TokenCreationResult {
@@ -32,60 +32,33 @@ export async function createToken(
 ): Promise<{ transaction: Transaction; mintKeypair: Keypair }> {
   const { decimals, supply } = params
 
-  // Generate new mint keypair
   const mintKeypair = Keypair.generate()
   const mintPublicKey = mintKeypair.publicKey
 
-  // Get minimum balance for rent exemption
   const lamports = await getMinimumBalanceForRentExemptMint(connection)
 
-  // Create transaction
   const transaction = new Transaction()
 
-  // Add system program instruction to create new account
-  transaction.add({
-    fromPubkey: payer,
-    newAccountPubkey: mintPublicKey,
-    space: MINT_SIZE,
-    lamports,
-    programId: TOKEN_PROGRAM_ID,
-  } as any)
-
-  // Add instruction to initialize mint
   transaction.add(
-    createInitializeMintInstruction(
-      mintPublicKey,
-      decimals,
-      payer, // mint authority
-      payer, // freeze authority (set to null if not needed)
-      TOKEN_PROGRAM_ID,
-    ),
+    SystemProgram.createAccount({
+      fromPubkey: payer,
+      newAccountPubkey: mintPublicKey,
+      space: MINT_SIZE,
+      lamports,
+      programId: TOKEN_PROGRAM_ID,
+    }),
   )
 
-  // Get associated token account address
+  transaction.add(createInitializeMintInstruction(mintPublicKey, decimals, payer, payer, TOKEN_PROGRAM_ID))
+
   const associatedTokenAccount = await getAssociatedTokenAddress(mintPublicKey, payer)
 
-  // Add instruction to create associated token account
-  transaction.add(
-    createAssociatedTokenAccountInstruction(
-      payer, // payer
-      associatedTokenAccount, // associated token account
-      payer, // owner
-      mintPublicKey, // mint
-    ),
-  )
+  transaction.add(createAssociatedTokenAccountInstruction(payer, associatedTokenAccount, payer, mintPublicKey))
 
-  // Add instruction to mint initial supply
   if (supply > 0) {
-    const amount = supply * Math.pow(10, decimals)
-    transaction.add(
-      createMintToInstruction(
-        mintPublicKey, // mint
-        associatedTokenAccount, // destination
-        payer, // authority
-        amount, // amount
-      ),
-    )
+    const amount = BigInt(supply) * BigInt(Math.pow(10, decimals))
+
+    transaction.add(createMintToInstruction(mintPublicKey, associatedTokenAccount, payer, amount))
   }
 
   return { transaction, mintKeypair }
@@ -95,19 +68,14 @@ export async function uploadTokenMetadata(params: {
   name: string
   symbol: string
   description: string
-  logoFile?: File
+  imageUrl?: string
 }): Promise<{ uri: string }> {
-  // In production, upload to IPFS or Arweave
-  // For now, return a placeholder
   const metadata = {
     name: params.name,
     symbol: params.symbol,
     description: params.description,
-    image: params.logoFile ? "https://placeholder.svg/icon" : "",
+    image: params.imageUrl || "",
   }
-
-  // TODO: Implement actual upload to decentralized storage
-  console.log("[v0] Token metadata prepared:", metadata)
 
   return {
     uri: `data:application/json;base64,${btoa(JSON.stringify(metadata))}`,

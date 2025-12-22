@@ -1,10 +1,20 @@
-const HELIUS_RPC_URL =
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_HELIUS_RPC_URL
-    : process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL
+/**
+ * NFT Service - Helius DAS API integration
+ *
+ * Uses secure RPC proxy on client-side to protect API keys
+ */
 
-if (!HELIUS_RPC_URL) {
-  console.error("[v0] HELIUS_RPC_URL not configured!")
+function getHeliusRPCUrl(): string {
+  if (typeof window !== "undefined") {
+    return "/api/solana/rpc" // Use secure proxy on client-side
+  }
+
+  const url = process.env.HELIUS_RPC_URL
+  if (!url) {
+    throw new Error("HELIUS_RPC_URL environment variable is required for server-side operations")
+  }
+
+  return url
 }
 
 export interface NFTAsset {
@@ -24,7 +34,9 @@ export interface NFTAsset {
 
 export async function getNFTsByOwner(walletAddress: string): Promise<NFTAsset[]> {
   try {
-    const response = await fetch(HELIUS_RPC_URL, {
+    const rpcUrl = getHeliusRPCUrl()
+
+    const response = await fetch(rpcUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -51,7 +63,7 @@ export async function getNFTsByOwner(walletAddress: string): Promise<NFTAsset[]>
     const data = await response.json()
 
     if (data.error) {
-      throw new Error(data.error.message)
+      throw new Error(data.error.message || "Failed to fetch NFTs")
     }
 
     const assets: NFTAsset[] = data.result.items.map((item: Record<string, unknown>) => ({
