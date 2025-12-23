@@ -533,7 +533,7 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex h-[600px] flex-col">
+    <Card className="flex h-auto max-h-[90vh] flex-col md:h-[600px]">
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
@@ -559,7 +559,7 @@ export function SolanaCopilot() {
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4 overflow-hidden p-0">
         {error && (
-          <div className="px-6 pt-4">
+          <div className="px-3 pt-4 sm:px-6">
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
@@ -568,7 +568,7 @@ export function SolanaCopilot() {
         )}
 
         {!publicKey && (
-          <div className="border-t px-6 py-3">
+          <div className="border-t px-3 py-3 sm:px-6 sm:py-3">
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>Connect your wallet to unlock all features</AlertDescription>
@@ -654,7 +654,7 @@ export function SolanaCopilot() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me anything about DeFi..."
+              placeholder="Ask me anything..."
               disabled={isLoading}
               className="flex-1 text-sm"
             />

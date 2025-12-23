@@ -766,7 +766,36 @@ export async function POST(request: NextRequest) {
       const lastMessage = formattedHistory[formattedHistory.length - 1]
       const result = await chat.sendMessageStream(lastMessage.parts[0].text)
 
-      break
+      const stream = result.stream
+      const reader = stream.getReader()
+      const encoder = new TextEncoder()
+
+      const customStream = new ReadableStream({
+        async start(controller) {
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+
+              const text = value.text?.() || value.toString?.() || ""
+              if (text) {
+                controller.enqueue(encoder.encode(text))
+              }
+            }
+            controller.close()
+          } catch (error) {
+            controller.error(error)
+          }
+        },
+      })
+
+      return new NextResponse(customStream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      })
     } catch (error: any) {
       console.error("[v0] Agent error:", error)
       console.error("[v0] Error details:", {
@@ -815,8 +844,14 @@ export async function POST(request: NextRequest) {
         errorMessage = `AI request failed: ${error.message}`
       }
 
+      if (retryCount >= maxRetries) {
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retryCount)))
       retryCount++
     }
   }
+
+  return NextResponse.json({ error: "Failed to process request after multiple retries" }, { status: 500 })
 }
