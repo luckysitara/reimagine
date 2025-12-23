@@ -213,6 +213,45 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
   }
 }
 
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 1000): Promise<T> {
+  let lastError: Error | undefined
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      lastError = error
+
+      // Don't retry on non-retriable errors
+      if (
+        error?.message?.includes("API_KEY_INVALID") ||
+        error?.message?.includes("API key not valid") ||
+        error?.code === "PERMISSION_DENIED"
+      ) {
+        throw error
+      }
+
+      // Only retry on rate limit or temporary errors
+      const isRateLimitError =
+        error?.status === 429 ||
+        error?.message?.toLowerCase().includes("rate limit") ||
+        error?.message?.toLowerCase().includes("resource exhausted") ||
+        error?.message?.toLowerCase().includes("too many requests")
+
+      if (!isRateLimitError && attempt === maxRetries - 1) {
+        throw error
+      }
+
+      // Calculate exponential backoff delay
+      const delay = initialDelay * Math.pow(2, attempt)
+      console.log(`[v0] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms delay`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError || new Error("Max retries exceeded")
+}
+
 export async function POST(request: Request) {
   const encoder = new TextEncoder()
   const stream = new TransformStream()
@@ -248,7 +287,7 @@ export async function POST(request: Request) {
 
       const genAI = new GoogleGenerativeAI(apiKey)
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.5-flash",
         tools,
         systemInstruction: systemPrompt,
       })
@@ -281,7 +320,7 @@ export async function POST(request: Request) {
 
       const lastMessage = messages[messages.length - 1]
 
-      let result = await chat.sendMessage(lastMessage.content)
+      let result = await retryWithBackoff(() => chat.sendMessage(lastMessage.content))
       let response = result.response
       let loopCount = 0
       const maxLoops = 5
@@ -311,15 +350,16 @@ export async function POST(request: Request) {
           result: functionResult,
         })
 
-        // Send function response back to model
-        result = await chat.sendMessage([
-          {
-            functionResponse: {
-              name: functionCall.name,
-              response: functionResult,
+        result = await retryWithBackoff(() =>
+          chat.sendMessage([
+            {
+              functionResponse: {
+                name: functionCall.name,
+                response: functionResult,
+              },
             },
-          },
-        ])
+          ]),
+        )
 
         response = result.response
       }
@@ -340,34 +380,50 @@ export async function POST(request: Request) {
       await writer.close()
     } catch (error: any) {
       console.error("[v0] Agent error:", error)
+      console.error("[v0] Error details:", {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        stack: error?.stack?.split("\n").slice(0, 3).join("\n"),
+      })
 
       let errorMessage = "Failed to process request"
 
       // Handle API key errors
-      if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("API key not valid")) {
+      if (
+        error?.message?.includes("API_KEY_INVALID") ||
+        error?.message?.includes("API key not valid") ||
+        error?.code === "PERMISSION_DENIED"
+      ) {
         errorMessage =
           "Invalid Google AI API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration. Get a free key at https://ai.google.dev/"
       }
       // Handle quota exceeded errors (429 Too Many Requests)
       else if (
-        error?.message?.includes("quota") ||
-        error?.message?.includes("429") ||
-        error?.message?.includes("Too Many Requests")
+        error?.status === 429 ||
+        error?.code === "RESOURCE_EXHAUSTED" ||
+        (error?.message?.toLowerCase().includes("quota") && error?.message?.toLowerCase().includes("exceed")) ||
+        error?.message?.toLowerCase().includes("too many requests")
       ) {
         errorMessage =
-          "Google AI API quota exceeded. Your free tier limits have been reached. Please wait a few minutes and try again, or upgrade your API plan at https://ai.google.dev/pricing"
+          "Google AI API quota exceeded or rate limit hit. Please wait a few minutes and try again. If this persists, consider upgrading your API plan at https://ai.google.dev/pricing"
       }
-      // Handle rate limit errors
-      else if (error?.message?.includes("rate limit") || error?.status === 429) {
+      // Handle rate limit errors (distinct from quota)
+      else if (error?.message?.toLowerCase().includes("rate limit")) {
         errorMessage = "Rate limit exceeded. Please wait a moment before sending another message."
       }
       // Handle model unavailable errors
-      else if (error?.message?.includes("model") && error?.message?.includes("not found")) {
-        errorMessage = "The AI model is not available. Please check your API key permissions or try again later."
+      else if (error?.message?.toLowerCase().includes("model") && error?.message?.toLowerCase().includes("not found")) {
+        errorMessage =
+          "The AI model is temporarily unavailable. Please try again in a moment or check your API key permissions."
+      }
+      // Handle safety/content filtering
+      else if (error?.message?.toLowerCase().includes("safety") || error?.code === "SAFETY") {
+        errorMessage = "Your message was blocked by safety filters. Please rephrase your request."
       }
       // Generic error with message
       else if (error?.message) {
-        errorMessage = error.message
+        errorMessage = `AI request failed: ${error.message}`
       }
 
       await sendMessage({ error: errorMessage })

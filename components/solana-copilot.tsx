@@ -46,7 +46,17 @@ export function SolanaCopilot() {
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastRequestTime, setLastRequestTime] = useState<number>(0)
+  const [requestCount, setRequestCount] = useState<number>(0)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRequestCount(0)
+    }, 60000) // Reset every 60 seconds
+
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -58,6 +68,24 @@ export function SolanaCopilot() {
     e.preventDefault()
 
     if (!input.trim() || isLoading) return
+
+    const now = Date.now()
+    const timeSinceLastRequest = now - lastRequestTime
+
+    if (requestCount >= 10 && timeSinceLastRequest < 60000) {
+      setError(
+        "You're sending messages too quickly. Please wait a moment before trying again to avoid hitting rate limits.",
+      )
+      return
+    }
+
+    if (timeSinceLastRequest < 2000) {
+      setError("Please wait a moment before sending another message.")
+      return
+    }
+
+    setLastRequestTime(now)
+    setRequestCount((prev) => prev + 1)
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -79,97 +107,124 @@ export function SolanaCopilot() {
 
     setMessages((prev) => [...prev, assistantMessage])
 
-    try {
-      const response = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          walletAddress: publicKey?.toBase58(),
-        }),
-      })
+    let retryCount = 0
+    const maxRetries = 2
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to get response")
-      }
+    while (retryCount <= maxRetries) {
+      try {
+        const response = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...messages, userMessage],
+            walletAddress: publicKey?.toBase58(),
+          }),
+        })
 
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
+        if (!response.ok) {
+          if (response.status === 429 && retryCount < maxRetries) {
+            const retryDelay = 2000 * Math.pow(2, retryCount)
+            console.log(`[v0] Rate limited, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`)
+            await new Promise((resolve) => setTimeout(resolve, retryDelay))
+            retryCount++
+            continue
+          }
 
-      if (!reader) {
-        throw new Error("No response stream")
-      }
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to get response")
+        }
 
-      let buffer = ""
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
 
-      while (true) {
-        const { done, value } = await reader.read()
+        if (!reader) {
+          throw new Error("No response stream")
+        }
 
-        if (done) break
+        let buffer = ""
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n\n")
-        buffer = lines.pop() || ""
+        while (true) {
+          const { done, value } = await reader.read()
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6))
+          if (done) break
 
-            if (data.error) {
-              setError(data.error)
-              break
-            }
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n\n")
+          buffer = lines.pop() || ""
 
-            if (data.type === "text_chunk") {
-              setMessages((prev) => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last.role === "assistant") {
-                  last.content += data.content
-                }
-                return updated
-              })
-            } else if (data.type === "tool_call") {
-              setMessages((prev) => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last.role === "assistant") {
-                  last.toolCalls = last.toolCalls || []
-                  last.toolCalls.push({
-                    toolName: data.toolName,
-                    args: data.args,
-                  })
-                }
-                return updated
-              })
-            } else if (data.type === "tool_result") {
-              setMessages((prev) => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last.role === "assistant" && last.toolCalls) {
-                  const tool = last.toolCalls.find((t) => t.toolName === data.toolName)
-                  if (tool) {
-                    tool.result = data.result
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.error) {
+                setError(data.error)
+                break
+              }
+
+              if (data.type === "text_chunk") {
+                setMessages((prev) => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last.role === "assistant") {
+                    last.content += data.content
                   }
-                }
-                return updated
-              })
-            } else if (data.type === "done") {
-              break
+                  return updated
+                })
+              } else if (data.type === "tool_call") {
+                setMessages((prev) => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last.role === "assistant") {
+                    last.toolCalls = last.toolCalls || []
+                    last.toolCalls.push({
+                      toolName: data.toolName,
+                      args: data.args,
+                    })
+                  }
+                  return updated
+                })
+              } else if (data.type === "tool_result") {
+                setMessages((prev) => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last.role === "assistant" && last.toolCalls) {
+                    const tool = last.toolCalls.find((t) => t.toolName === data.toolName)
+                    if (tool) {
+                      tool.result = data.result
+                    }
+                  }
+                  return updated
+                })
+              } else if (data.type === "done") {
+                break
+              }
             }
           }
         }
-      }
-    } catch (err: any) {
-      console.error("[v0] Copilot error:", err)
-      setError(err.message || "An error occurred")
 
-      // Remove the empty assistant message on error
-      setMessages((prev) => prev.filter((m) => m.content || m.toolCalls?.length))
-    } finally {
-      setIsLoading(false)
+        break
+      } catch (err: any) {
+        console.error(`[v0] Copilot error (attempt ${retryCount + 1}/${maxRetries + 1}):`, err)
+
+        if (retryCount < maxRetries && !err.message?.toLowerCase().includes("api")) {
+          const retryDelay = 2000 * Math.pow(2, retryCount)
+          console.log(`[v0] Retrying in ${retryDelay}ms...`)
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+          retryCount++
+          continue
+        }
+
+        setError(err.message || "An error occurred")
+        setMessages((prev) => prev.filter((m) => m.content || m.toolCalls?.length))
+        break
+      } finally {
+        if (retryCount > maxRetries) {
+          setIsLoading(false)
+        }
+      }
     }
+
+    setIsLoading(false)
   }
 
   const handleExamplePrompt = (prompt: string) => {
