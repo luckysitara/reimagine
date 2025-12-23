@@ -428,45 +428,53 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           }
         }
 
-        const tokens = await getJupiterTokenList()
-        const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
-        const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+        try {
+          const tokens = await getJupiterTokenList()
+          const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
+          const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
 
-        if (!inputTokenData || !outputTokenData) {
+          if (!inputTokenData || !outputTokenData) {
+            return {
+              success: false,
+              error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}. Please check the token symbol and try again.`,
+            }
+          }
+
+          const makingAmount = Math.floor(args.inputAmount * Math.pow(10, inputTokenData.decimals)).toString()
+          const takingAmount = Math.floor(
+            args.inputAmount * args.targetPrice * Math.pow(10, outputTokenData.decimals),
+          ).toString()
+
+          const expirationDays = args.expirationDays || 30
+          const expiredAt = Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60
+
+          const result = await createLimitOrder({
+            inputMint: inputTokenData.address,
+            outputMint: outputTokenData.address,
+            maker: walletAddress,
+            payer: walletAddress,
+            makingAmount,
+            takingAmount,
+            expiredAt,
+          })
+
+          return {
+            success: true,
+            type: "limit_order",
+            message: `Limit order created: Sell ${args.inputAmount} ${args.inputToken} for ${args.targetPrice} ${args.outputToken} per unit`,
+            inputToken: args.inputToken,
+            outputToken: args.outputToken,
+            inputAmount: args.inputAmount,
+            targetPrice: args.targetPrice,
+            expiresIn: `${expirationDays} days`,
+            transaction: result.tx,
+          }
+        } catch (error: any) {
+          console.error("[v0] Limit order creation error:", error)
           return {
             success: false,
-            error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}`,
+            error: `Failed to create limit order: ${error?.message || "Unknown error"}`,
           }
-        }
-
-        const makingAmount = Math.floor(args.inputAmount * Math.pow(10, inputTokenData.decimals)).toString()
-        const takingAmount = Math.floor(
-          args.inputAmount * args.targetPrice * Math.pow(10, outputTokenData.decimals),
-        ).toString()
-
-        const expirationDays = args.expirationDays || 30
-        const expiredAt = Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60
-
-        const result = await createLimitOrder({
-          inputMint: inputTokenData.address,
-          outputMint: outputTokenData.address,
-          maker: walletAddress,
-          payer: walletAddress,
-          makingAmount,
-          takingAmount,
-          expiredAt,
-        })
-
-        return {
-          success: true,
-          type: "limit_order",
-          message: `Limit order created: Sell ${args.inputAmount} ${args.inputToken} for ${args.targetPrice} ${args.outputToken} per unit`,
-          inputToken: args.inputToken,
-          outputToken: args.outputToken,
-          inputAmount: args.inputAmount,
-          targetPrice: args.targetPrice,
-          expiresIn: `${expirationDays} days`,
-          transaction: result.tx,
         }
       }
 
@@ -478,41 +486,49 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           }
         }
 
-        const tokens = await getJupiterTokenList()
-        const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
-        const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+        try {
+          const tokens = await getJupiterTokenList()
+          const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
+          const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
 
-        if (!inputTokenData || !outputTokenData) {
+          if (!inputTokenData || !outputTokenData) {
+            return {
+              success: false,
+              error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}. Please check the token symbol and try again.`,
+            }
+          }
+
+          const amountInSmallestUnit = Math.floor(args.totalAmount * Math.pow(10, inputTokenData.decimals)).toString()
+          const cycleFrequency = args.frequencyHours * 3600
+          const numberOfOrders = Math.floor(args.totalAmount / args.amountPerCycle)
+
+          const result = await createDCAOrder({
+            inputMint: inputTokenData.address,
+            outputMint: outputTokenData.address,
+            payer: walletAddress,
+            amount: amountInSmallestUnit,
+            cycleFrequency,
+            numberOfOrders,
+          })
+
+          return {
+            success: true,
+            type: "dca_order",
+            message: `DCA order created: ${args.amountPerCycle} ${args.inputToken} → ${args.outputToken} every ${args.frequencyHours}h for ${numberOfOrders} cycles`,
+            inputToken: args.inputToken,
+            outputToken: args.outputToken,
+            totalAmount: args.totalAmount,
+            amountPerCycle: args.amountPerCycle,
+            frequency: `${args.frequencyHours} hours`,
+            cycles: numberOfOrders,
+            transaction: result.tx,
+          }
+        } catch (error: any) {
+          console.error("[v0] DCA order creation error:", error)
           return {
             success: false,
-            error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}`,
+            error: `Failed to create DCA order: ${error?.message || "Unknown error"}`,
           }
-        }
-
-        const amountInSmallestUnit = Math.floor(args.totalAmount * Math.pow(10, inputTokenData.decimals)).toString()
-        const cycleFrequency = args.frequencyHours * 3600
-        const numberOfOrders = Math.floor(args.totalAmount / args.amountPerCycle)
-
-        const result = await createDCAOrder({
-          inputMint: inputTokenData.address,
-          outputMint: outputTokenData.address,
-          payer: walletAddress,
-          amount: amountInSmallestUnit,
-          cycleFrequency,
-          numberOfOrders,
-        })
-
-        return {
-          success: true,
-          type: "dca_order",
-          message: `DCA order created: ${args.amountPerCycle} ${args.inputToken} → ${args.outputToken} every ${args.frequencyHours}h for ${numberOfOrders} cycles`,
-          inputToken: args.inputToken,
-          outputToken: args.outputToken,
-          totalAmount: args.totalAmount,
-          amountPerCycle: args.amountPerCycle,
-          frequency: `${args.frequencyHours} hours`,
-          cycles: numberOfOrders,
-          transaction: result.tx,
         }
       }
 
@@ -527,6 +543,20 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
         const decimals = args.decimals || 9
 
         try {
+          if (!args.name || !args.symbol || args.supply === undefined) {
+            return {
+              success: false,
+              error: "Missing required fields: name, symbol, and supply are required to create a token.",
+            }
+          }
+
+          if (args.symbol.length < 1 || args.symbol.length > 10) {
+            return {
+              success: false,
+              error: "Token symbol must be between 1 and 10 characters.",
+            }
+          }
+
           const response = await fetch("/api/token/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -543,34 +573,32 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
           if (!response.ok) {
             const error = await response.json().catch(() => ({
-              error: "Unknown error",
+              error: `HTTP ${response.status}: ${response.statusText}`,
             }))
             console.error("[v0] Token creation API error:", error)
             return {
               success: false,
-              error: error.details || error.error || `Token creation failed: ${response.statusText}`,
+              error: error.error || error.details || "Failed to create token. Please check your inputs and try again.",
             }
           }
 
-          const result = await response.json()
+          const data = await response.json()
 
           return {
             success: true,
             type: "token_creation",
-            message: `Token ${args.symbol} created successfully!`,
-            name: args.name,
-            symbol: args.symbol,
-            decimals,
-            supply: args.supply,
-            mintAddress: result.mintAddress,
-            transaction: result.transaction,
+            message: `Token ${args.symbol} created successfully! Ready to sign transaction.`,
+            tokenName: args.name,
+            tokenSymbol: args.symbol,
+            initialSupply: args.supply,
+            mintAddress: data.mintAddress,
+            transaction: data.transaction,
           }
-        } catch (fetchError) {
-          console.error("[v0] Token creation fetch error:", fetchError)
+        } catch (error: any) {
+          console.error("[v0] Token creation error:", error)
           return {
             success: false,
-            error:
-              fetchError instanceof Error ? fetchError.message : "Failed to communicate with token creation service",
+            error: `Failed to create token: ${error?.message || "Unknown error"}. Please ensure you have at least 0.1 SOL for fees.`,
           }
         }
       }
@@ -657,11 +685,36 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           error: `Unknown function: ${name}`,
         }
     }
-  } catch (error) {
-    console.error(`[v0] Function execution error for ${name}:`, error)
+  } catch (error: any) {
+    console.error(`[v0] Function execution error:`, error)
+
+    const errorMessage = error?.message || error?.error || "Unknown error"
+
+    // Map common errors to user-friendly messages
+    if (errorMessage.includes("insufficient") || errorMessage.includes("balance")) {
+      return {
+        success: false,
+        error: "Insufficient balance. Please ensure you have enough SOL or tokens for this operation.",
+      }
+    }
+
+    if (errorMessage.includes("not found") || errorMessage.includes("invalid")) {
+      return {
+        success: false,
+        error: `Invalid or missing data: ${errorMessage}. Please check your inputs and try again.`,
+      }
+    }
+
+    if (errorMessage.includes("timeout") || errorMessage.includes("network")) {
+      return {
+        success: false,
+        error: "Network error or request timeout. Please check your connection and try again.",
+      }
+    }
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Function execution failed",
+      error: `Operation failed: ${errorMessage}`,
     }
   }
 }
@@ -771,7 +824,7 @@ export async function POST(request: Request) {
         },
       })
 
-      const lastMessage = messages[messages.length - 1]
+      const lastMessage = messages[messages.length - 1] // Declare lastMessage variable
 
       let result = await retryWithBackoff(() => chat.sendMessage(lastMessage.content))
       let response = result.response
