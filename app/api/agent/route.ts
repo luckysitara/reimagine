@@ -527,65 +527,44 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
         const decimals = args.decimals || 9
 
-        let apiUrl: string
-        try {
-          if (process.env.NEXT_PUBLIC_VERCEL_URL) {
-            apiUrl = `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/api/token/create`
-          } else if (process.env.NEXT_PUBLIC_BASE_URL) {
-            apiUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/token/create`
-          } else {
-            apiUrl = "http://localhost:3000/api/token/create"
-          }
-        } catch (urlError) {
-          console.error("[v0] URL construction error:", urlError)
-          return {
-            success: false,
-            error: "Failed to construct API URL for token creation",
-          }
-        }
+        const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
+          ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/api/token/create`
+          : `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/token/create`
 
-        try {
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: args.name,
-              symbol: args.symbol,
-              decimals,
-              supply: args.supply,
-              description: args.description || "",
-              imageUrl: args.imageUrl || "",
-              walletAddress,
-            }),
-          })
-
-          if (!response.ok) {
-            const error = await response.json()
-            return {
-              success: false,
-              error: error.details || error.error || "Failed to create token",
-            }
-          }
-
-          const result = await response.json()
-
-          return {
-            success: true,
-            type: "token_creation",
-            message: `Token ${args.symbol} created successfully!`,
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             name: args.name,
             symbol: args.symbol,
             decimals,
             supply: args.supply,
-            mintAddress: result.mintAddress,
-            transaction: result.transaction,
-          }
-        } catch (fetchError) {
-          console.error("[v0] Token creation fetch error:", fetchError)
+            description: args.description || "",
+            imageUrl: args.imageUrl || "",
+            walletAddress,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
           return {
             success: false,
-            error: `Failed to create token: ${fetchError instanceof Error ? fetchError.message : "Unknown error"}`,
+            error: error.details || error.error || "Failed to create token",
           }
+        }
+
+        const result = await response.json()
+
+        return {
+          success: true,
+          type: "token_creation",
+          message: `Token ${args.symbol} created successfully!`,
+          name: args.name,
+          symbol: args.symbol,
+          decimals,
+          supply: args.supply,
+          mintAddress: result.mintAddress,
+          transaction: result.transaction,
         }
       }
 
@@ -766,36 +745,7 @@ export async function POST(request: NextRequest) {
       const lastMessage = formattedHistory[formattedHistory.length - 1]
       const result = await chat.sendMessageStream(lastMessage.parts[0].text)
 
-      const stream = result.stream
-      const reader = stream.getReader()
-      const encoder = new TextEncoder()
-
-      const customStream = new ReadableStream({
-        async start(controller) {
-          try {
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-
-              const text = value.text?.() || value.toString?.() || ""
-              if (text) {
-                controller.enqueue(encoder.encode(text))
-              }
-            }
-            controller.close()
-          } catch (error) {
-            controller.error(error)
-          }
-        },
-      })
-
-      return new NextResponse(customStream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      })
+      break
     } catch (error: any) {
       console.error("[v0] Agent error:", error)
       console.error("[v0] Error details:", {
@@ -844,14 +794,8 @@ export async function POST(request: NextRequest) {
         errorMessage = `AI request failed: ${error.message}`
       }
 
-      if (retryCount >= maxRetries) {
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
-      }
-
       await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retryCount)))
       retryCount++
     }
   }
-
-  return NextResponse.json({ error: "Failed to process request after multiple retries" }, { status: 500 })
 }

@@ -27,13 +27,12 @@ interface Message {
 
 const EXAMPLE_PROMPTS = [
   "Swap 1 SOL for USDC",
-  "Clear all my small tokens",
+  "Clear all my small tokens to SOL",
+  "Create limit order: buy 100 USDC of SOL at $140",
+  "Set up DCA: invest 10 SOL into BONK weekly",
+  "Create a new token called MyToken",
   "What's my portfolio worth?",
-  "Create limit order for SOL",
-  "Set up weekly DCA",
-  "Create new token",
   "Analyze news for SOL",
-  "Show my active orders",
 ]
 
 export function SolanaCopilot() {
@@ -533,9 +532,9 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex h-auto max-h-[90vh] flex-col md:h-[600px]">
+    <Card className="flex h-[600px] flex-col">
       <CardHeader>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
@@ -545,21 +544,15 @@ export function SolanaCopilot() {
               <CardDescription>Your intelligent DeFi assistant</CardDescription>
             </div>
           </div>
-          <Button
-            variant={autopilotMode ? "default" : "outline"}
-            size="sm"
-            onClick={toggleAutopilot}
-            className="gap-2 whitespace-nowrap"
-          >
+          <Button variant={autopilotMode ? "default" : "outline"} size="sm" onClick={toggleAutopilot} className="gap-2">
             <Radio className={`h-4 w-4 ${autopilotMode ? "animate-pulse" : ""}`} />
-            <span className="hidden sm:inline">{autopilotMode ? "Autopilot ON" : "Autopilot OFF"}</span>
-            <span className="inline sm:hidden">{autopilotMode ? "ON" : "OFF"}</span>
+            {autopilotMode ? "Autopilot ON" : "Autopilot OFF"}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4 overflow-hidden p-0">
         {error && (
-          <div className="px-3 pt-4 sm:px-6">
+          <div className="px-6 pt-4">
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
@@ -568,7 +561,7 @@ export function SolanaCopilot() {
         )}
 
         {!publicKey && (
-          <div className="border-t px-3 py-3 sm:px-6 sm:py-3">
+          <div className="border-t px-6 py-3">
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>Connect your wallet to unlock all features</AlertDescription>
@@ -577,14 +570,14 @@ export function SolanaCopilot() {
         )}
 
         {messages.length <= 2 && (
-          <div className="border-t px-3 py-3 sm:px-6 sm:py-4">
+          <div className="border-t px-6 py-3">
             <p className="mb-2 text-xs font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
               {EXAMPLE_PROMPTS.map((prompt, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleExamplePrompt(prompt)}
-                  className="rounded-md border border-border bg-background px-2 py-2 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground sm:px-3"
+                  className="rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
                   disabled={isLoading}
                 >
                   {prompt}
@@ -594,27 +587,27 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        <ScrollArea ref={scrollAreaRef} className="flex-1 px-3 sm:px-6">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 px-6">
           <div className="space-y-4 py-4">
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex gap-2 sm:gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {message.role === "assistant" && (
-                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs sm:text-sm">
+                  <Avatar className="h-8 w-8 border">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground">
                       AI
                     </AvatarFallback>
                   </Avatar>
                 )}
 
                 <div
-                  className={`max-w-xs sm:max-w-md lg:max-w-lg space-y-2 rounded-lg px-3 py-2 sm:px-4 sm:py-2 text-sm ${
+                  className={`max-w-[80%] space-y-2 rounded-lg px-4 py-2 ${
                     message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                   }`}
                 >
-                  {message.content && <div className="whitespace-pre-wrap text-sm break-words">{message.content}</div>}
+                  {message.content && <div className="whitespace-pre-wrap text-sm">{message.content}</div>}
 
                   {message.toolCalls && message.toolCalls.length > 0 && (
                     <div className="mt-2 space-y-2">
@@ -624,8 +617,8 @@ export function SolanaCopilot() {
                 </div>
 
                 {message.role === "user" && (
-                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
-                    <AvatarFallback className="bg-accent text-accent-foreground text-xs sm:text-sm">U</AvatarFallback>
+                  <Avatar className="h-8 w-8 border">
+                    <AvatarFallback className="bg-accent text-accent-foreground">U</AvatarFallback>
                   </Avatar>
                 )}
               </div>
@@ -634,31 +627,31 @@ export function SolanaCopilot() {
             {isLoading &&
               messages[messages.length - 1]?.role === "assistant" &&
               !messages[messages.length - 1]?.content && (
-                <div className="flex gap-2 sm:gap-3">
-                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs">
+                <div className="flex gap-3">
+                  <Avatar className="h-8 w-8 border">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground">
                       AI
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 sm:px-4 sm:py-3">
+                  <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-xs sm:text-sm text-muted-foreground">Thinking...</span>
+                    <span className="text-sm text-muted-foreground">Thinking...</span>
                   </div>
                 </div>
               )}
           </div>
         </ScrollArea>
 
-        <div className="border-t px-3 py-3 sm:px-6 sm:py-4">
+        <div className="border-t px-6 py-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me anything..."
+              placeholder="Ask me anything about DeFi trading..."
               disabled={isLoading}
-              className="flex-1 text-sm"
+              className="flex-1"
             />
-            <Button type="submit" size="icon" disabled={isLoading || !input.trim()} className="shrink-0">
+            <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
