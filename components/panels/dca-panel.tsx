@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Repeat, Plus, X, Loader2 } from "lucide-react"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import { VersionedTransaction } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ const FREQUENCY_OPTIONS = [
 export function DCAPanel() {
   const { publicKey, signTransaction } = useWallet()
   const { setVisible } = useWalletModal()
+  const { connection } = useConnection()
 
   const [tokens, setTokens] = useState<JupiterToken[]>([])
   const [dcaAccounts, setDcaAccounts] = useState<DCAAccount[]>([])
@@ -179,20 +181,75 @@ export function DCAPanel() {
         throw new Error(data.error || "Failed to create DCA")
       }
 
-      toast.success(
-        "DCA order transaction created! The order will appear after blockchain confirmation (may take a few moments).",
+      if (!data.transaction) {
+        throw new Error("No transaction returned from API")
+      }
+
+      console.log("[v0] Deserializing transaction...")
+      const transactionBuf = Buffer.from(data.transaction, "base64")
+      const transaction = VersionedTransaction.deserialize(transactionBuf)
+
+      console.log("[v0] Requesting wallet signature...")
+      toast.loading("Please sign the transaction in your wallet...")
+      const signedTransaction = await signTransaction(transaction)
+
+      console.log("[v0] Sending transaction to network...")
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
+        preflightCommitment: "confirmed",
+      })
+
+      toast.loading("Confirming transaction...")
+      console.log("[v0] Transaction sent:", signature)
+
+      const latestBlockhash = await connection.getLatestBlockhash("confirmed")
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        },
+        "confirmed",
       )
+
+      console.log("[v0] Transaction confirmed:", signature)
+
+      toast.success("DCA order created successfully!", {
+        description: (
+          <a
+            href={`https://solscan.io/tx/${signature}${
+              process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
+            }`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            View on Solscan
+          </a>
+        ),
+      })
+
       setShowCreateDialog(false)
       setTotalAmount("")
       setAmountPerCycle("")
 
       setTimeout(() => {
-        console.log("[v0] Refreshing DCA accounts after delay...")
+        console.log("[v0] Refreshing DCA accounts after successful creation...")
         loadDCAAccounts()
-      }, 5000)
+      }, 2000)
     } catch (error) {
       console.error("[v0] Create DCA error:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to create DCA")
+
+      if (error instanceof Error) {
+        if (error.message.includes("User rejected") || error.message.includes("cancelled")) {
+          toast.error("Transaction cancelled by user")
+        } else {
+          toast.error(error.message)
+        }
+      } else {
+        toast.error("Failed to create DCA")
+      }
     } finally {
       setIsCreating(false)
     }
