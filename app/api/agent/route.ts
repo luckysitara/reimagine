@@ -7,7 +7,6 @@ import { analyzeTokenNews } from "@/lib/tools/analyze-token-news"
 import { getJupiterTokenList } from "@/lib/services/jupiter"
 import { createLimitOrder, getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
 import { createDCAOrder, getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
-import { type NextRequest, NextResponse } from "next/server"
 
 const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. You help users execute blockchain operations and analyze token-related news through natural language.
 
@@ -527,11 +526,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
         const decimals = args.decimals || 9
 
-        const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-          ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/api/token/create`
-          : `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/token/create`
-
-        const response = await fetch(apiUrl, {
+        const response = await fetch("/api/token/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -698,54 +693,132 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initial
   throw lastError || new Error("Max retries exceeded")
 }
 
-export async function POST(request: NextRequest) {
-  let retryCount = 0
-  const maxRetries = 3
+export async function POST(request: Request) {
+  const encoder = new TextEncoder()
+  const stream = new TransformStream()
+  const writer = stream.writable.getWriter()
 
-  while (retryCount <= maxRetries) {
+  const sendMessage = async (data: any) => {
+    await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+  }
+  ;(async () => {
     try {
-      const body = await request.json()
-      const { messages, walletAddress } = body
+      const { messages, walletAddress } = await request.json()
 
-      if (!process.env.GOOGLE_API_KEY) {
-        return NextResponse.json(
-          { error: "Google API key not configured. Please add GOOGLE_API_KEY to your environment variables." },
-          { status: 500 },
-        )
+      console.log("[v0] Received request with", messages?.length, "messages")
+
+      if (!messages || !Array.isArray(messages)) {
+        await sendMessage({ error: "Messages array is required" })
+        await writer.close()
+        return
       }
 
-      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+
+      if (!apiKey || apiKey.trim() === "" || apiKey === "your-api-key-here") {
+        await sendMessage({
+          error:
+            "AI service not configured. Please set a valid GOOGLE_GENERATIVE_AI_API_KEY in environment variables. Get your free API key at https://ai.google.dev/",
+        })
+        await writer.close()
+        return
+      }
+
+      console.log("[v0] Initializing Gemini AI...")
+
+      const genAI = new GoogleGenerativeAI(apiKey)
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.5-flash",
         tools,
         systemInstruction: systemPrompt,
       })
 
-      const formattedHistory = messages
-        .filter((msg: any) => msg.role !== "system")
-        .map((msg: any) => ({
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }],
-        }))
+      const history = messages.slice(0, -1).map((msg: any) => ({
+        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      }))
 
-      // Ensure the first message is always from user
-      if (formattedHistory.length > 0 && formattedHistory[0].role !== "user") {
-        formattedHistory.unshift({
-          role: "user",
-          parts: [{ text: "Hello" }],
-        })
+      // Filter out any consecutive messages with the same role
+      const filteredHistory: any[] = []
+      for (const msg of history) {
+        if (filteredHistory.length === 0 || filteredHistory[filteredHistory.length - 1].role !== msg.role) {
+          filteredHistory.push(msg)
+        }
       }
 
-      console.log("[v0] Starting chat with history length:", formattedHistory.length)
+      // Ensure first message is from user
+      if (filteredHistory.length > 0 && filteredHistory[0].role !== "user") {
+        filteredHistory.shift()
+      }
 
       const chat = model.startChat({
-        history: formattedHistory.slice(0, -1),
+        history: filteredHistory,
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.7,
+        },
       })
 
-      const lastMessage = formattedHistory[formattedHistory.length - 1]
-      const result = await chat.sendMessageStream(lastMessage.parts[0].text)
+      const lastMessage = messages[messages.length - 1]
 
-      break
+      let result = await retryWithBackoff(() => chat.sendMessage(lastMessage.content))
+      let response = result.response
+      let loopCount = 0
+      const maxLoops = 5
+
+      while (response.candidates?.[0]?.content?.parts?.[0]?.functionCall && loopCount < maxLoops) {
+        loopCount++
+        const functionCall = response.candidates[0].content.parts[0].functionCall
+
+        console.log(`[v0] Function call detected (iteration ${loopCount}):`, functionCall.name)
+
+        // Send tool call notification to client
+        await sendMessage({
+          type: "tool_call",
+          toolName: functionCall.name,
+          args: functionCall.args,
+        })
+
+        // Execute the function
+        const functionResult = await executeFunctionCall(functionCall, walletAddress)
+
+        console.log(`[v0] Function result:`, functionResult)
+
+        // Send tool result to client
+        await sendMessage({
+          type: "tool_result",
+          toolName: functionCall.name,
+          result: functionResult,
+        })
+
+        result = await retryWithBackoff(() =>
+          chat.sendMessage([
+            {
+              functionResponse: {
+                name: functionCall.name,
+                response: functionResult,
+              },
+            },
+          ]),
+        )
+
+        response = result.response
+      }
+
+      const text = response.text()
+
+      // Send chunks for streaming effect
+      const words = text.split(" ")
+      for (const word of words) {
+        await sendMessage({
+          type: "text_chunk",
+          content: word + " ",
+        })
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+
+      await sendMessage({ type: "done" })
+      await writer.close()
     } catch (error: any) {
       console.error("[v0] Agent error:", error)
       console.error("[v0] Error details:", {
@@ -764,7 +837,7 @@ export async function POST(request: NextRequest) {
         error?.code === "PERMISSION_DENIED"
       ) {
         errorMessage =
-          "Invalid Google AI API key. Please check your GOOGLE_API_KEY configuration. Get a free key at https://ai.google.dev/"
+          "Invalid Google AI API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration. Get a free key at https://ai.google.dev/"
       }
       // Handle quota exceeded errors (429 Too Many Requests)
       else if (
@@ -794,8 +867,16 @@ export async function POST(request: NextRequest) {
         errorMessage = `AI request failed: ${error.message}`
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retryCount)))
-      retryCount++
+      await sendMessage({ error: errorMessage })
+      await writer.close()
     }
-  }
+  })()
+
+  return new Response(stream.readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  })
 }

@@ -560,99 +560,86 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        {!publicKey && (
-          <div className="border-t px-6 py-3">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>Connect your wallet to unlock all features</AlertDescription>
+        {autopilotMode && (
+          <div className="px-6 pt-4">
+            <Alert className="border-green-500/50 bg-green-500/10">
+              <Radio className="h-4 w-4 animate-pulse text-green-500" />
+              <AlertDescription className="text-sm">
+                <strong>Autopilot Mode Active:</strong> Monitoring your portfolio, prices, and news for opportunities.
+              </AlertDescription>
             </Alert>
           </div>
         )}
 
-        {messages.length <= 2 && (
-          <div className="border-t px-6 py-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {EXAMPLE_PROMPTS.map((prompt, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleExamplePrompt(prompt)}
-                  className="rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-                  disabled={isLoading}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <ScrollArea ref={scrollAreaRef} className="flex-1 px-6">
-          <div className="space-y-4 py-4">
+        <ScrollArea className="flex-1 px-6" ref={scrollAreaRef}>
+          <div className="space-y-4 pb-4">
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
               >
-                {message.role === "assistant" && (
-                  <Avatar className="h-8 w-8 border">
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground">
-                      AI
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarFallback className={message.role === "user" ? "bg-primary text-primary-foreground" : ""}>
+                    {message.role === "user" ? "U" : "AI"}
+                  </AvatarFallback>
+                </Avatar>
                 <div
                   className={`max-w-[80%] space-y-2 rounded-lg px-4 py-2 ${
                     message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                   }`}
                 >
-                  {message.content && <div className="whitespace-pre-wrap text-sm">{message.content}</div>}
+                  {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
 
-                  {message.toolCalls && message.toolCalls.length > 0 && (
-                    <div className="mt-2 space-y-2">
-                      {message.toolCalls.map((toolCall, idx) => renderToolResult(toolCall, idx))}
-                    </div>
-                  )}
+                  {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
                 </div>
-
-                {message.role === "user" && (
-                  <Avatar className="h-8 w-8 border">
-                    <AvatarFallback className="bg-accent text-accent-foreground">U</AvatarFallback>
-                  </Avatar>
-                )}
               </div>
             ))}
 
-            {isLoading &&
-              messages[messages.length - 1]?.role === "assistant" &&
-              !messages[messages.length - 1]?.content && (
-                <div className="flex gap-3">
-                  <Avatar className="h-8 w-8 border">
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground">
-                      AI
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">Thinking...</span>
-                  </div>
+            {isLoading && (
+              <div className="flex gap-3">
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Thinking...</span>
                 </div>
-              )}
+              </div>
+            )}
           </div>
         </ScrollArea>
 
-        <div className="border-t px-6 py-4">
+        {messages.length === 1 && (
+          <div className="px-6">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Try asking:</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {EXAMPLE_PROMPTS.map((prompt, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start bg-transparent text-left"
+                  onClick={() => handleExamplePrompt(prompt)}
+                  disabled={isLoading}
+                >
+                  {prompt}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-border p-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
+              placeholder="Ask me to swap, create orders, launch tokens, analyze portfolio..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me anything about DeFi trading..."
               disabled={isLoading}
               className="flex-1"
             />
-            <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
+              <Send className="h-4 w-4" />
             </Button>
           </form>
         </div>
