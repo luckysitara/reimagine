@@ -1,19 +1,44 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prepareSwap } from "@/lib/tools/execute-swap"
+import { prepareMultiSwap } from "@/lib/tools/execute-multi-swap"
 import { analyzePortfolio } from "@/lib/tools/analyze-portfolio"
 import { getTokenPrice } from "@/lib/tools/get-token-price"
 import { analyzeTokenNews } from "@/lib/tools/analyze-token-news"
+import { getJupiterTokenList } from "@/lib/services/jupiter"
+import { createLimitOrder, getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
+import { createDCAOrder, getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
 
 const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. You help users execute blockchain operations and analyze token-related news through natural language.
 
 Capabilities:
-- Execute token swaps using Jupiter DEX Ultra API
+- Execute single token swaps using Jupiter DEX Ultra API
+- Execute multi-token swaps to consolidate multiple tokens into one (reduce clutter, minimize fees)
+- Create and manage limit orders (buy/sell at target prices)
+- Create and manage DCA orders (dollar-cost averaging for automated recurring purchases)
+- Create new SPL tokens with custom metadata
+- View and cancel active limit/DCA orders
 - Provide portfolio analysis and recommendations
 - Fetch real-time token prices
 - Analyze news and social media for tokens, including sentiment and trends
 - Operate in autopilot mode to proactively monitor portfolios, prices, and news
 - Explain DeFi concepts in simple terms
 - Help users make informed trading decisions
+
+When users want to consolidate/clear multiple tokens:
+1. Use get_wallet_tokens or analyze_portfolio to see all tokens
+2. Ask which tokens they want to swap and what output token they prefer (SOL/USDC recommended)
+3. Use execute_multi_swap with an array of token symbols and amounts
+4. Each swap will be prepared individually and executed sequentially
+
+When users ask about creating orders:
+1. Verify wallet connection
+2. Extract tokens, amounts, and order parameters
+3. Use the appropriate tool (create_limit_order or create_dca_order)
+4. Return transaction details for user to sign
+
+When users want to see their orders:
+- Use get_active_orders to fetch limit and DCA orders
+- Display them in an organized, readable format
 
 When users ask about token news:
 1. Extract the token symbol and optional time range
@@ -24,6 +49,11 @@ For swaps:
 1. Verify wallet connection
 2. Extract input/output tokens and amount
 3. Use execute_swap, confirm details, and warn about price impact (>1%)
+
+For token creation:
+1. Extract name, symbol, decimals, supply, and optional metadata
+2. Verify sufficient SOL balance (minimum 0.1 SOL required)
+3. Use create_token to prepare the transaction
 
 In autopilot mode:
 - Monitor portfolio, prices, and news periodically
@@ -56,6 +86,39 @@ const tools = [
             },
           },
           required: ["inputToken", "outputToken", "amount"],
+        },
+      },
+      {
+        name: "execute_multi_swap",
+        description:
+          "Consolidate multiple tokens into a single output token in one operation. Perfect for clearing dust tokens, portfolio cleanup, or reducing transaction fees. Each token will be swapped sequentially to the target output token.",
+        parameters: {
+          type: "object",
+          properties: {
+            tokens: {
+              type: "array",
+              description: "Array of tokens to swap with their amounts",
+              items: {
+                type: "object",
+                properties: {
+                  symbol: {
+                    type: "string",
+                    description: "Token symbol (e.g., BONK, JUP, RAY)",
+                  },
+                  amount: {
+                    type: "number",
+                    description: "Amount of this token to swap",
+                  },
+                },
+                required: ["symbol", "amount"],
+              },
+            },
+            outputToken: {
+              type: "string",
+              description: "Target token to receive (e.g., SOL, USDC). Recommended: SOL or USDC for best liquidity.",
+            },
+          },
+          required: ["tokens", "outputToken"],
         },
       },
       {
@@ -106,6 +169,139 @@ const tools = [
           required: ["tokenSymbol"],
         },
       },
+      {
+        name: "create_limit_order",
+        description:
+          "Create a limit order to automatically execute a trade when the market reaches your target price. The order will remain active until filled, cancelled, or expired.",
+        parameters: {
+          type: "object",
+          properties: {
+            inputToken: {
+              type: "string",
+              description: "Token symbol to sell/spend (e.g., SOL, USDC)",
+            },
+            outputToken: {
+              type: "string",
+              description: "Token symbol to buy/receive (e.g., BONK, JUP)",
+            },
+            inputAmount: {
+              type: "number",
+              description: "Amount of input token to sell",
+            },
+            targetPrice: {
+              type: "number",
+              description: "Target price in output token units per input token (e.g., 130 USDC per SOL)",
+            },
+            expirationDays: {
+              type: "number",
+              description: "Days until order expires (default: 30 days)",
+            },
+          },
+          required: ["inputToken", "outputToken", "inputAmount", "targetPrice"],
+        },
+      },
+      {
+        name: "create_dca_order",
+        description:
+          "Create a Dollar-Cost Averaging (DCA) order for automated recurring token purchases. Helps reduce timing risk by spreading purchases over time.",
+        parameters: {
+          type: "object",
+          properties: {
+            inputToken: {
+              type: "string",
+              description: "Token to spend per cycle (e.g., SOL, USDC)",
+            },
+            outputToken: {
+              type: "string",
+              description: "Token to buy each cycle (e.g., BONK, JUP)",
+            },
+            totalAmount: {
+              type: "number",
+              description: "Total amount to invest (will be divided into cycles)",
+            },
+            amountPerCycle: {
+              type: "number",
+              description: "Amount to spend per cycle",
+            },
+            frequencyHours: {
+              type: "number",
+              description: "Hours between each purchase (e.g., 24 for daily, 168 for weekly)",
+            },
+          },
+          required: ["inputToken", "outputToken", "totalAmount", "amountPerCycle", "frequencyHours"],
+        },
+      },
+      {
+        name: "create_token",
+        description:
+          "Create a new SPL token on Solana with custom name, symbol, supply, and metadata. Requires at least 0.1 SOL for transaction fees.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Full token name (e.g., My Awesome Token)",
+            },
+            symbol: {
+              type: "string",
+              description: "Token ticker symbol, 3-6 characters (e.g., MAT, MYTKN)",
+            },
+            decimals: {
+              type: "number",
+              description: "Decimal places for token (typically 6-9, default: 9)",
+            },
+            supply: {
+              type: "number",
+              description: "Initial token supply (in whole units)",
+            },
+            description: {
+              type: "string",
+              description: "Token description (optional)",
+            },
+            imageUrl: {
+              type: "string",
+              description: "URL to token logo image (optional)",
+            },
+          },
+          required: ["name", "symbol", "supply"],
+        },
+      },
+      {
+        name: "get_active_orders",
+        description: "Fetch all active limit orders and DCA orders for the connected wallet.",
+        parameters: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
+        name: "cancel_limit_order",
+        description: "Cancel an active limit order by its order ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            orderId: {
+              type: "string",
+              description: "The public key/ID of the limit order to cancel",
+            },
+          },
+          required: ["orderId"],
+        },
+      },
+      {
+        name: "cancel_dca_order",
+        description: "Cancel an active DCA order by its order ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            orderId: {
+              type: "string",
+              description: "The public key/ID of the DCA order to cancel",
+            },
+          },
+          required: ["orderId"],
+        },
+      },
     ],
   },
 ]
@@ -141,6 +337,32 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           estimatedOutput: result.estimatedOutput,
           priceImpact: result.priceImpact,
           requestId: result.requestId,
+          transaction: result.transaction,
+        }
+      }
+
+      case "execute_multi_swap": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected. Please connect your wallet to execute multi-swaps.",
+          }
+        }
+
+        const result = await prepareMultiSwap({
+          tokens: args.tokens,
+          outputToken: args.outputToken,
+          walletAddress,
+        })
+
+        return {
+          success: true,
+          type: "multi_swap",
+          message: `Multi-swap prepared: ${result.totalSwaps} tokens → ${result.totalEstimatedOutput.toFixed(6)} ${result.outputToken}`,
+          swaps: result.swaps,
+          totalEstimatedOutput: result.totalEstimatedOutput,
+          outputToken: result.outputToken,
+          totalSwaps: result.totalSwaps,
         }
       }
 
@@ -195,6 +417,225 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           trends: news.trends,
           riskIndicators: news.riskIndicators,
           summary: news.summary,
+        }
+      }
+
+      case "create_limit_order": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected. Please connect your wallet to create limit orders.",
+          }
+        }
+
+        const tokens = await getJupiterTokenList()
+        const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
+        const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+
+        if (!inputTokenData || !outputTokenData) {
+          return {
+            success: false,
+            error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}`,
+          }
+        }
+
+        const makingAmount = Math.floor(args.inputAmount * Math.pow(10, inputTokenData.decimals)).toString()
+        const takingAmount = Math.floor(
+          args.inputAmount * args.targetPrice * Math.pow(10, outputTokenData.decimals),
+        ).toString()
+
+        const expirationDays = args.expirationDays || 30
+        const expiredAt = Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60
+
+        const result = await createLimitOrder({
+          inputMint: inputTokenData.address,
+          outputMint: outputTokenData.address,
+          maker: walletAddress,
+          payer: walletAddress,
+          makingAmount,
+          takingAmount,
+          expiredAt,
+        })
+
+        return {
+          success: true,
+          type: "limit_order",
+          message: `Limit order created: Sell ${args.inputAmount} ${args.inputToken} for ${args.targetPrice} ${args.outputToken} per unit`,
+          inputToken: args.inputToken,
+          outputToken: args.outputToken,
+          inputAmount: args.inputAmount,
+          targetPrice: args.targetPrice,
+          expiresIn: `${expirationDays} days`,
+          transaction: result.tx,
+        }
+      }
+
+      case "create_dca_order": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected. Please connect your wallet to create DCA orders.",
+          }
+        }
+
+        const tokens = await getJupiterTokenList()
+        const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
+        const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+
+        if (!inputTokenData || !outputTokenData) {
+          return {
+            success: false,
+            error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}`,
+          }
+        }
+
+        const amountInSmallestUnit = Math.floor(args.totalAmount * Math.pow(10, inputTokenData.decimals)).toString()
+        const cycleFrequency = args.frequencyHours * 3600
+        const numberOfOrders = Math.floor(args.totalAmount / args.amountPerCycle)
+
+        const result = await createDCAOrder({
+          inputMint: inputTokenData.address,
+          outputMint: outputTokenData.address,
+          payer: walletAddress,
+          amount: amountInSmallestUnit,
+          cycleFrequency,
+          numberOfOrders,
+        })
+
+        return {
+          success: true,
+          type: "dca_order",
+          message: `DCA order created: ${args.amountPerCycle} ${args.inputToken} → ${args.outputToken} every ${args.frequencyHours}h for ${numberOfOrders} cycles`,
+          inputToken: args.inputToken,
+          outputToken: args.outputToken,
+          totalAmount: args.totalAmount,
+          amountPerCycle: args.amountPerCycle,
+          frequency: `${args.frequencyHours} hours`,
+          cycles: numberOfOrders,
+          transaction: result.tx,
+        }
+      }
+
+      case "create_token": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected. Please connect your wallet to create tokens.",
+          }
+        }
+
+        const decimals = args.decimals || 9
+
+        const response = await fetch("/api/token/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: args.name,
+            symbol: args.symbol,
+            decimals,
+            supply: args.supply,
+            description: args.description || "",
+            imageUrl: args.imageUrl || "",
+            walletAddress,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          return {
+            success: false,
+            error: error.details || error.error || "Failed to create token",
+          }
+        }
+
+        const result = await response.json()
+
+        return {
+          success: true,
+          type: "token_creation",
+          message: `Token ${args.symbol} created successfully!`,
+          name: args.name,
+          symbol: args.symbol,
+          decimals,
+          supply: args.supply,
+          mintAddress: result.mintAddress,
+          transaction: result.transaction,
+        }
+      }
+
+      case "get_active_orders": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected.",
+          }
+        }
+
+        const [limitOrders, dcaOrders] = await Promise.all([
+          getOpenOrders(walletAddress),
+          getDCAAccounts(walletAddress),
+        ])
+
+        return {
+          success: true,
+          limitOrders: limitOrders.map((order: any) => ({
+            id: order.publicKey,
+            inputMint: order.account.inputMint,
+            outputMint: order.account.outputMint,
+            makingAmount: order.account.makingAmount,
+            takingAmount: order.account.takingAmount,
+            expiredAt: order.account.expiredAt,
+            state: order.account.state,
+          })),
+          dcaOrders: dcaOrders.map((order: any) => ({
+            id: order.publicKey,
+            inputMint: order.account.inputMint,
+            outputMint: order.account.outputMint,
+            inDeposited: order.account.inDeposited,
+            inUsed: order.account.inUsed,
+            inAmountPerCycle: order.account.inAmountPerCycle,
+            cycleFrequency: order.account.cycleFrequency,
+            nextCycleAt: order.account.nextCycleAt,
+          })),
+          totalOrders: limitOrders.length + dcaOrders.length,
+        }
+      }
+
+      case "cancel_limit_order": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected.",
+          }
+        }
+
+        const result = await cancelLimitOrder(args.orderId, walletAddress)
+
+        return {
+          success: true,
+          type: "cancel_limit_order",
+          message: `Limit order cancelled successfully`,
+          orderId: args.orderId,
+          transaction: result.tx,
+        }
+      }
+
+      case "cancel_dca_order": {
+        if (!walletAddress) {
+          return {
+            success: false,
+            error: "Wallet not connected.",
+          }
+        }
+
+        const result = await closeDCAOrder(args.orderId, walletAddress)
+
+        return {
+          success: true,
+          type: "cancel_dca_order",
+          message: `DCA order cancelled successfully`,
+          orderId: args.orderId,
+          transaction: result.tx,
         }
       }
 

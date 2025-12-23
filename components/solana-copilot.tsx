@@ -3,15 +3,16 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, Loader2, TrendingUp, AlertCircle, Radio } from "lucide-react"
+import { Send, Sparkles, Loader2, AlertCircle, Radio, CheckCircle, XCircle } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
+import { Connection, VersionedTransaction } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
 
 interface Message {
   id: string
@@ -26,21 +27,23 @@ interface Message {
 
 const EXAMPLE_PROMPTS = [
   "Swap 1 SOL for USDC",
+  "Clear all my small tokens to SOL",
+  "Create limit order: buy 100 USDC of SOL at $140",
+  "Set up DCA: invest 10 SOL into BONK weekly",
+  "Create a new token called MyToken",
   "What's my portfolio worth?",
-  "Analyze news for SOL token",
-  "Get price of JUP token",
-  "Enable autopilot mode",
+  "Analyze news for SOL",
 ]
 
 export function SolanaCopilot() {
-  const { publicKey } = useWallet()
+  const { publicKey, signTransaction } = useWallet()
   const [autopilotMode, setAutopilotMode] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
       content:
-        "Hello! I'm your AI DeFi assistant. I can help you swap tokens, analyze your portfolio, get token news, and execute complex blockchain operations. What would you like to do?",
+        "Hello! I'm your AI DeFi assistant. I can help you swap tokens, create limit/DCA orders, launch new tokens, analyze your portfolio, monitor news, and more. What would you like to do?",
     },
   ])
   const [input, setInput] = useState("")
@@ -49,11 +52,12 @@ export function SolanaCopilot() {
   const [lastRequestTime, setLastRequestTime] = useState<number>(0)
   const [requestCount, setRequestCount] = useState<number>(0)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     const interval = setInterval(() => {
       setRequestCount(0)
-    }, 60000) // Reset every 60 seconds
+    }, 60000)
 
     return () => clearInterval(interval)
   }, [])
@@ -63,6 +67,62 @@ export function SolanaCopilot() {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
     }
   }, [messages])
+
+  const handleSignTransaction = async (transactionBase64: string, toolName: string) => {
+    if (!signTransaction || !publicKey) {
+      toast({
+        title: "Wallet Error",
+        description: "Please connect your wallet to sign transactions",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      console.log(`[v0] Signing ${toolName} transaction...`)
+
+      const transactionBuf = Buffer.from(transactionBase64, "base64")
+      const transaction = VersionedTransaction.deserialize(transactionBuf)
+
+      const signedTransaction = await signTransaction(transaction)
+
+      const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+      const connection = new Connection(rpcUrl, "confirmed")
+
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
+      })
+
+      console.log(`[v0] Transaction sent:`, signature)
+
+      toast({
+        title: "Transaction Submitted",
+        description: `${toolName} transaction is being confirmed...`,
+      })
+
+      const latestBlockhash = await connection.getLatestBlockhash()
+      await connection.confirmTransaction({
+        signature,
+        ...latestBlockhash,
+      })
+
+      toast({
+        title: "Success!",
+        description: `${toolName} confirmed on-chain`,
+      })
+
+      return signature
+    } catch (error) {
+      console.error(`[v0] Transaction signing error:`, error)
+      toast({
+        title: "Transaction Failed",
+        description: error instanceof Error ? error.message : "Failed to sign transaction",
+        variant: "destructive",
+      })
+      throw error
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -238,6 +298,239 @@ export function SolanaCopilot() {
     }
   }
 
+  const renderToolResult = (toolCall: any, idx: number) => {
+    const result = toolCall.result
+
+    if (!result) {
+      return (
+        <div key={idx} className="rounded-md border border-border bg-background p-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-accent" />
+            <span className="text-xs font-semibold">Running {toolCall.toolName}...</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (!result.success) {
+      return (
+        <div key={idx} className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-destructive" />
+            <span className="text-xs font-semibold">{toolCall.toolName} failed</span>
+          </div>
+          <p className="mt-2 text-xs text-destructive">{result.error}</p>
+        </div>
+      )
+    }
+
+    if (result.type === "multi_swap") {
+      return (
+        <div key={idx} className="space-y-3 rounded-md border border-green-500/50 bg-green-500/10 p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            <span className="text-xs font-semibold text-green-700 dark:text-green-400">{result.message}</span>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total Swaps:</span>
+              <span className="font-mono">{result.totalSwaps}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Estimated Total:</span>
+              <span className="font-mono">
+                {result.totalEstimatedOutput.toFixed(6)} {result.outputToken}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-2 space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground">Swap Breakdown:</p>
+            {result.swaps?.map((swap: any, swapIdx: number) => (
+              <div key={swapIdx} className="rounded bg-background/50 p-2">
+                <div className="flex justify-between text-xs">
+                  <span className="font-mono">
+                    {swap.inputAmount} {swap.inputToken}
+                  </span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="font-mono">
+                    {swap.estimatedOutput.toFixed(6)} {swap.outputToken}
+                  </span>
+                </div>
+                <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                  <span>Impact: {swap.priceImpact}%</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-5 px-2 text-[10px]"
+                    onClick={() => handleSignTransaction(swap.transaction, `Swap ${swap.inputToken}`)}
+                  >
+                    Sign This Swap
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={async () => {
+                for (const swap of result.swaps || []) {
+                  await handleSignTransaction(swap.transaction, `Swap ${swap.inputToken}`)
+                }
+              }}
+            >
+              Sign All Swaps
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    // Handle different tool result types with specialized UI
+    if (result.type === "limit_order" || result.type === "dca_order" || result.type === "token_creation") {
+      return (
+        <div key={idx} className="space-y-2 rounded-md border border-green-500/50 bg-green-500/10 p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            <span className="text-xs font-semibold text-green-700 dark:text-green-400">{result.message}</span>
+          </div>
+
+          {result.type === "limit_order" && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Sell:</span>
+                <span className="font-mono">
+                  {result.inputAmount} {result.inputToken}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Target Price:</span>
+                <span className="font-mono">
+                  {result.targetPrice} {result.outputToken}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Expires:</span>
+                <span>{result.expiresIn}</span>
+              </div>
+            </div>
+          )}
+
+          {result.type === "dca_order" && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Per Cycle:</span>
+                <span className="font-mono">
+                  {result.amountPerCycle} {result.inputToken}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Frequency:</span>
+                <span>{result.frequency}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Cycles:</span>
+                <span>{result.cycles}</span>
+              </div>
+            </div>
+          )}
+
+          {result.type === "token_creation" && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-mono">{result.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Symbol:</span>
+                <span className="font-mono">{result.symbol}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Supply:</span>
+                <span className="font-mono">{result.supply}</span>
+              </div>
+              {result.mintAddress && (
+                <div className="mt-2 rounded bg-background p-2">
+                  <span className="text-muted-foreground">Mint:</span>
+                  <p className="break-all font-mono text-xs">{result.mintAddress}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {result.transaction && (
+            <Button
+              size="sm"
+              onClick={() => handleSignTransaction(result.transaction, toolCall.toolName)}
+              className="mt-2 w-full"
+            >
+              Sign & Submit Transaction
+            </Button>
+          )}
+        </div>
+      )
+    }
+
+    if (result.transaction && !result.type) {
+      return (
+        <div key={idx} className="space-y-2 rounded-md border border-green-500/50 bg-green-500/10 p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            <span className="text-xs font-semibold text-green-700 dark:text-green-400">{result.message}</span>
+          </div>
+
+          {result.estimatedOutput && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">You Pay:</span>
+                <span className="font-mono">
+                  {result.inputAmount} {result.inputToken}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">You Receive:</span>
+                <span className="font-mono">
+                  {result.estimatedOutput.toFixed(6)} {result.outputToken}
+                </span>
+              </div>
+              {result.priceImpact && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Price Impact:</span>
+                  <span className={`font-mono ${Number.parseFloat(result.priceImpact) > 1 ? "text-orange-500" : ""}`}>
+                    {result.priceImpact}%
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            size="sm"
+            onClick={() => handleSignTransaction(result.transaction, toolCall.toolName)}
+            className="mt-2 w-full"
+          >
+            Sign & Submit Swap
+          </Button>
+        </div>
+      )
+    }
+
+    // Default tool result display
+    return (
+      <div key={idx} className="rounded-md border border-border bg-background p-3">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <span className="text-xs font-semibold">{toolCall.toolName}</span>
+        </div>
+        <div className="mt-2 text-xs text-green-600">{result.message || "Completed successfully"}</div>
+      </div>
+    )
+  }
+
   return (
     <Card className="flex h-[600px] flex-col">
       <CardHeader>
@@ -297,30 +590,7 @@ export function SolanaCopilot() {
                 >
                   {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
 
-                  {message.toolCalls?.map((toolCall, idx) => (
-                    <div key={idx} className="rounded-md border border-border bg-background p-3">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-accent" />
-                        <span className="text-xs font-semibold">
-                          Action: {toolCall.toolName}
-                          {!toolCall.result && (
-                            <Badge variant="outline" className="ml-2">
-                              Running...
-                            </Badge>
-                          )}
-                        </span>
-                      </div>
-                      {toolCall.result && (
-                        <div className="mt-2 text-xs">
-                          {toolCall.result.success ? (
-                            <div className="text-green-600">✓ {toolCall.result.message || "Completed"}</div>
-                          ) : (
-                            <div className="text-red-600">✗ {toolCall.result.error || "Failed"}</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
                 </div>
               </div>
             ))}
@@ -362,7 +632,7 @@ export function SolanaCopilot() {
         <div className="border-t border-border p-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
-              placeholder="Ask me to swap tokens, analyze news, or monitor your portfolio..."
+              placeholder="Ask me to swap, create orders, launch tokens, analyze portfolio..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isLoading}
