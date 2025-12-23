@@ -27,12 +27,13 @@ interface Message {
 
 const EXAMPLE_PROMPTS = [
   "Swap 1 SOL for USDC",
-  "Clear all my small tokens to SOL",
-  "Create limit order: buy 100 USDC of SOL at $140",
-  "Set up DCA: invest 10 SOL into BONK weekly",
-  "Create a new token called MyToken",
+  "Clear all my small tokens",
   "What's my portfolio worth?",
+  "Create limit order for SOL",
+  "Set up weekly DCA",
+  "Create new token",
   "Analyze news for SOL",
+  "Show my active orders",
 ]
 
 export function SolanaCopilot() {
@@ -534,7 +535,7 @@ export function SolanaCopilot() {
   return (
     <Card className="flex h-[600px] flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
@@ -544,9 +545,15 @@ export function SolanaCopilot() {
               <CardDescription>Your intelligent DeFi assistant</CardDescription>
             </div>
           </div>
-          <Button variant={autopilotMode ? "default" : "outline"} size="sm" onClick={toggleAutopilot} className="gap-2">
+          <Button
+            variant={autopilotMode ? "default" : "outline"}
+            size="sm"
+            onClick={toggleAutopilot}
+            className="gap-2 whitespace-nowrap"
+          >
             <Radio className={`h-4 w-4 ${autopilotMode ? "animate-pulse" : ""}`} />
-            {autopilotMode ? "Autopilot ON" : "Autopilot OFF"}
+            <span className="hidden sm:inline">{autopilotMode ? "Autopilot ON" : "Autopilot OFF"}</span>
+            <span className="inline sm:hidden">{autopilotMode ? "ON" : "OFF"}</span>
           </Button>
         </div>
       </CardHeader>
@@ -560,86 +567,99 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        {autopilotMode && (
-          <div className="px-6 pt-4">
-            <Alert className="border-green-500/50 bg-green-500/10">
-              <Radio className="h-4 w-4 animate-pulse text-green-500" />
-              <AlertDescription className="text-sm">
-                <strong>Autopilot Mode Active:</strong> Monitoring your portfolio, prices, and news for opportunities.
-              </AlertDescription>
+        {!publicKey && (
+          <div className="border-t px-6 py-3">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>Connect your wallet to unlock all features</AlertDescription>
             </Alert>
           </div>
         )}
 
-        <ScrollArea className="flex-1 px-6" ref={scrollAreaRef}>
-          <div className="space-y-4 pb-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-              >
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className={message.role === "user" ? "bg-primary text-primary-foreground" : ""}>
-                    {message.role === "user" ? "U" : "AI"}
-                  </AvatarFallback>
-                </Avatar>
-                <div
-                  className={`max-w-[80%] space-y-2 rounded-lg px-4 py-2 ${
-                    message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                  }`}
-                >
-                  {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
-
-                  {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
-                </div>
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex gap-3">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback>AI</AvatarFallback>
-                </Avatar>
-                <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-
-        {messages.length === 1 && (
-          <div className="px-6">
-            <p className="mb-3 text-sm font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {EXAMPLE_PROMPTS.map((prompt, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  className="justify-start bg-transparent text-left"
+        {messages.length <= 2 && (
+          <div className="border-t px-3 py-3 sm:px-6 sm:py-4">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Try asking:</p>
+            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+              {EXAMPLE_PROMPTS.map((prompt, idx) => (
+                <button
+                  key={idx}
                   onClick={() => handleExamplePrompt(prompt)}
+                  className="rounded-md border border-border bg-background px-2 py-2 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground sm:px-3"
                   disabled={isLoading}
                 >
                   {prompt}
-                </Button>
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        <div className="border-t border-border p-4">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 px-3 sm:px-6">
+          <div className="space-y-4 py-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-2 sm:gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {message.role === "assistant" && (
+                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs sm:text-sm">
+                      AI
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+
+                <div
+                  className={`max-w-xs sm:max-w-md lg:max-w-lg space-y-2 rounded-lg px-3 py-2 sm:px-4 sm:py-2 text-sm ${
+                    message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                  }`}
+                >
+                  {message.content && <div className="whitespace-pre-wrap text-sm break-words">{message.content}</div>}
+
+                  {message.toolCalls && message.toolCalls.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {message.toolCalls.map((toolCall, idx) => renderToolResult(toolCall, idx))}
+                    </div>
+                  )}
+                </div>
+
+                {message.role === "user" && (
+                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
+                    <AvatarFallback className="bg-accent text-accent-foreground text-xs sm:text-sm">U</AvatarFallback>
+                  </Avatar>
+                )}
+              </div>
+            ))}
+
+            {isLoading &&
+              messages[messages.length - 1]?.role === "assistant" &&
+              !messages[messages.length - 1]?.content && (
+                <div className="flex gap-2 sm:gap-3">
+                  <Avatar className="h-6 w-6 border sm:h-8 sm:w-8">
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs">
+                      AI
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 sm:px-4 sm:py-3">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-xs sm:text-sm text-muted-foreground">Thinking...</span>
+                  </div>
+                </div>
+              )}
+          </div>
+        </ScrollArea>
+
+        <div className="border-t px-3 py-3 sm:px-6 sm:py-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
-              placeholder="Ask me to swap, create orders, launch tokens, analyze portfolio..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me anything about DeFi..."
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 text-sm"
             />
-            <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
-              <Send className="h-4 w-4" />
+            <Button type="submit" size="icon" disabled={isLoading || !input.trim()} className="shrink-0">
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
         </div>
