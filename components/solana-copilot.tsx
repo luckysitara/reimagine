@@ -532,7 +532,7 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex h-[600px] flex-col">
+    <Card className="flex h-screen md:h-[600px] flex-col">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -571,7 +571,7 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        <ScrollArea className="flex-1 px-6" ref={scrollAreaRef}>
+        <ScrollArea className="flex-1 px-4 md:px-6" ref={scrollAreaRef}>
           <div className="space-y-4 pb-4">
             {messages.map((message) => (
               <div
@@ -610,9 +610,9 @@ export function SolanaCopilot() {
         </ScrollArea>
 
         {messages.length === 1 && (
-          <div className="px-6">
+          <div className="px-4 md:px-6">
             <p className="mb-3 text-sm font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
               {EXAMPLE_PROMPTS.map((prompt, index) => (
                 <Button
                   key={index}
@@ -629,14 +629,14 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        <div className="border-t border-border p-4">
+        <div className="border-t border-border p-3 md:p-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
               placeholder="Ask me to swap, create orders, launch tokens, analyze portfolio..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 text-sm md:text-base"
             />
             <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
               <Send className="h-4 w-4" />

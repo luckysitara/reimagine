@@ -49,9 +49,12 @@ export interface SwapResult {
 export async function getJupiterTokenList(): Promise<JupiterToken[]> {
   try {
     const response = await fetch("/api/jupiter/tokens")
-    if (!response.ok) throw new Error("Failed to fetch token list")
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `Failed to fetch token list: ${response.statusText}`)
+    }
     const tokens = await response.json()
-    return tokens
+    return Array.isArray(tokens) ? tokens : []
   } catch (error) {
     console.error("[v0] Jupiter token list error:", error)
     throw error
@@ -60,14 +63,16 @@ export async function getJupiterTokenList(): Promise<JupiterToken[]> {
 
 export async function searchJupiterTokens(query: string): Promise<JupiterToken[]> {
   try {
-    const response = await fetch(`/api/jupiter/search?query=${encodeURIComponent(query)}`)
+    const encodedQuery = encodeURIComponent(query)
+    const response = await fetch(`/api/jupiter/search?query=${encodedQuery}`)
 
     if (!response.ok) {
-      throw new Error(`Jupiter search failed: ${response.statusText}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `Jupiter search failed: ${response.statusText}`)
     }
 
     const tokens = await response.json()
-    return tokens
+    return Array.isArray(tokens) ? tokens : []
   } catch (error) {
     console.error("[v0] Jupiter search error:", error)
     throw error
@@ -121,20 +126,22 @@ export async function getJupiterQuote(
       throw new Error("Wallet address is required. Please connect your wallet to get quotes.")
     }
 
-    const url =
-      `/api/jupiter/order?` +
-      `inputMint=${inputMint}&` +
-      `outputMint=${outputMint}&` +
-      `amount=${amount}&` +
-      `slippageBps=${slippageBps}&` +
-      `taker=${taker}`
+    const params = new URLSearchParams({
+      inputMint,
+      outputMint,
+      amount: amount.toString(),
+      slippageBps: slippageBps.toString(),
+      taker,
+    })
 
-    console.log("[v0] Fetching Jupiter Ultra order:", url)
+    const url = `/api/jupiter/order?${params.toString()}`
+
+    console.log("[v0] Fetching Jupiter Ultra order from:", url)
 
     const response = await fetch(url)
 
     if (!response.ok) {
-      const errorData = await response.json()
+      const errorData = await response.json().catch(() => ({}))
       const errorMsg = errorData.error || errorData.details?.errorMessage || `HTTP ${response.status}`
 
       if (errorMsg.includes("Insufficient funds")) {
@@ -229,7 +236,10 @@ export async function executeJupiterOrder(signedTransaction: string, requestId: 
 
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`Execute failed: ${error}`)
+      console.error("[v0] Execute failed with status:", response.status, error)
+      throw new Error(
+        `Execute failed: ${response.status === 400 ? "Invalid transaction or insufficient funds" : error}`,
+      )
     }
 
     return await response.json()

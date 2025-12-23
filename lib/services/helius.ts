@@ -98,29 +98,50 @@ export async function getTokenBalances(walletAddress: string): Promise<TokenBala
 
 export async function enrichTokenData(balances: TokenBalance[]): Promise<TokenBalance[]> {
   try {
-    const mintAddresses = balances.map((b) => b.mint).join(",")
-    const response = await fetch(`/api/jupiter/search?query=${mintAddresses}`)
-
-    if (!response.ok) {
-      console.error("[v0] Jupiter API error:", response.statusText)
-      return balances
+    if (balances.length === 0) {
+      return []
     }
 
-    const jupiterTokens = await response.json()
-    const tokenMap = new Map(jupiterTokens.map((token: any) => [token.address, token]))
+    const mintAddresses = balances.map((b) => b.mint).join(",")
+    const encodedQuery = encodeURIComponent(mintAddresses)
 
-    return balances.map((balance) => {
-      const tokenInfo = tokenMap.get(balance.mint)
-      if (tokenInfo) {
-        return {
-          ...balance,
-          symbol: tokenInfo.symbol,
-          name: tokenInfo.name,
-          logoURI: tokenInfo.logoURI,
-        }
+    try {
+      const response = await fetch(`/api/jupiter/search?query=${encodedQuery}`)
+
+      if (!response.ok) {
+        console.error("[v0] Jupiter API error:", response.status, response.statusText)
+        // Return unmodified balances if enrichment fails
+        return balances
       }
-      return balance
-    })
+
+      const jupiterTokens = await response.json()
+
+      // Handle case where API returns error object instead of array
+      if (jupiterTokens.error) {
+        console.error("[v0] Jupiter API returned error:", jupiterTokens.error)
+        return balances
+      }
+
+      const tokenMap = new Map(
+        (Array.isArray(jupiterTokens) ? jupiterTokens : []).map((token: any) => [token.address, token]),
+      )
+
+      return balances.map((balance) => {
+        const tokenInfo = tokenMap.get(balance.mint)
+        if (tokenInfo) {
+          return {
+            ...balance,
+            symbol: tokenInfo.symbol,
+            name: tokenInfo.name,
+            logoURI: tokenInfo.logoURI,
+          }
+        }
+        return balance
+      })
+    } catch (fetchError) {
+      console.error("[v0] Failed to fetch token enrichment data:", fetchError)
+      return balances
+    }
   } catch (error) {
     console.error("[v0] Error enriching token data:", error)
     return balances
@@ -160,10 +181,13 @@ export async function getPortfolioValue(walletAddress: string): Promise<Portfoli
       const priceResponse = await fetch("/api/jupiter/price?ids=So11111111111111111111111111111111111111112")
       if (priceResponse.ok) {
         const priceData = await priceResponse.json()
-        solPriceUSD = priceData.data?.So11111111111111111111111111111111111111112?.price || 100
+        if (priceData.data && typeof priceData.data === "object") {
+          solPriceUSD = priceData.data.So11111111111111111111111111111111111111112?.price || 100
+        }
       }
     } catch (error) {
       console.error("[v0] Error fetching SOL price:", error)
+      // Continue with fallback price
     }
 
     const totalValueUSD = solBalanceUI * solPriceUSD

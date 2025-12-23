@@ -14,11 +14,17 @@ export async function GET() {
       headers["x-api-key"] = JUPITER_API_KEY
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
     const response = await fetch(`${JUPITER_ULTRA_API}/search?query=SOL,USDC,USDT,wBTC,ETH,RAY,SRM,ORCA,MNGO,BONK`, {
       headers,
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId))
 
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error("[v0] Jupiter tokens API error:", response.status, errorText)
       throw new Error(`Jupiter API error: ${response.statusText}`)
     }
 
@@ -41,6 +47,13 @@ export async function GET() {
     })
   } catch (error) {
     console.error("[v0] Jupiter tokens API error:", error)
-    return NextResponse.json({ error: "Failed to fetch token list" }, { status: 500 })
+    const errorMsg =
+      error instanceof Error && error.name === "AbortError"
+        ? "Request timeout - Jupiter API took too long to respond"
+        : error instanceof Error
+          ? error.message
+          : "Failed to fetch token list"
+
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }

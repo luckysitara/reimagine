@@ -21,12 +21,21 @@ export async function GET(request: Request) {
       headers["x-api-key"] = JUPITER_API_KEY
     }
 
-    const response = await fetch(`${JUPITER_ULTRA_API}/search?query=${encodeURIComponent(query)}`, {
+    const searchUrl = `${JUPITER_ULTRA_API}/search?query=${encodeURIComponent(query)}`
+    console.log("[v0] Jupiter search request for query:", query)
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+    const response = await fetch(searchUrl, {
       headers,
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId))
 
     if (!response.ok) {
-      throw new Error(`Jupiter API error: ${response.statusText}`)
+      const errorText = await response.text()
+      console.error("[v0] Jupiter API error:", response.status, errorText)
+      return NextResponse.json({ error: `Jupiter API error: ${response.statusText}` }, { status: response.status })
     }
 
     const data = await response.json()
@@ -44,6 +53,13 @@ export async function GET(request: Request) {
     return NextResponse.json(tokens)
   } catch (error) {
     console.error("[v0] Jupiter search API error:", error)
-    return NextResponse.json({ error: "Failed to search tokens" }, { status: 500 })
+    const errorMsg =
+      error instanceof Error && error.name === "AbortError"
+        ? "Request timeout - Jupiter API took too long to respond"
+        : error instanceof Error
+          ? error.message
+          : "Failed to search tokens"
+
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }

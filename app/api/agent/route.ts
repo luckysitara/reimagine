@@ -526,40 +526,52 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
         const decimals = args.decimals || 9
 
-        const response = await fetch("/api/token/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        try {
+          const response = await fetch("/api/token/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: args.name,
+              symbol: args.symbol,
+              decimals,
+              supply: args.supply,
+              description: args.description || "",
+              imageUrl: args.imageUrl || "",
+              walletAddress,
+            }),
+          })
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({
+              error: "Unknown error",
+            }))
+            console.error("[v0] Token creation API error:", error)
+            return {
+              success: false,
+              error: error.details || error.error || `Token creation failed: ${response.statusText}`,
+            }
+          }
+
+          const result = await response.json()
+
+          return {
+            success: true,
+            type: "token_creation",
+            message: `Token ${args.symbol} created successfully!`,
             name: args.name,
             symbol: args.symbol,
             decimals,
             supply: args.supply,
-            description: args.description || "",
-            imageUrl: args.imageUrl || "",
-            walletAddress,
-          }),
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
+            mintAddress: result.mintAddress,
+            transaction: result.transaction,
+          }
+        } catch (fetchError) {
+          console.error("[v0] Token creation fetch error:", fetchError)
           return {
             success: false,
-            error: error.details || error.error || "Failed to create token",
+            error:
+              fetchError instanceof Error ? fetchError.message : "Failed to communicate with token creation service",
           }
-        }
-
-        const result = await response.json()
-
-        return {
-          success: true,
-          type: "token_creation",
-          message: `Token ${args.symbol} created successfully!`,
-          name: args.name,
-          symbol: args.symbol,
-          decimals,
-          supply: args.supply,
-          mintAddress: result.mintAddress,
-          transaction: result.transaction,
         }
       }
 
