@@ -1,5 +1,6 @@
 import { type Connection, VersionedTransaction } from "@solana/web3.js"
 import { Buffer } from "buffer"
+import { secureRPCClient } from "@/lib/utils/rpc-client"
 
 const JUPITER_ULTRA_API = "https://api.jup.ag/ultra/v1"
 
@@ -151,39 +152,22 @@ export async function searchJupiterTokens(query: string): Promise<JupiterToken[]
 
 export async function estimateGasFee(): Promise<number> {
   try {
-    // Get recent transaction prices
-    const response = await fetch("https://api.mainnet-beta.solana.com", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "getRecentPrioritizationFees",
-        params: [[]], // Get fees for all transactions
-      }),
-    })
-
-    if (!response.ok) {
-      return 5000 // Default fallback: 0.000005 SOL
-    }
-
-    const data = await response.json()
-    const fees = data.result || []
+    const recentFees = await secureRPCClient.request("getRecentPrioritizationFees", [[]])
+    const fees = recentFees || []
 
     if (fees.length === 0) {
-      return 5000
+      return 5000 // Default fallback: 0.000005 SOL in lamports
     }
 
-    // Get median fee
+    // Get median fee from recent transactions
     const sortedFees = fees.map((f: any) => f.prioritizationFee).sort((a: number, b: number) => a - b)
     const medianFee = sortedFees[Math.floor(sortedFees.length / 2)] || 5000
 
+    console.log("[v0] Estimated gas fee:", medianFee, "lamports")
     return medianFee
   } catch (error) {
     console.error("[v0] Gas fee estimation error:", error)
-    return 5000 // Default: 0.000005 SOL in lamports
+    return 5000 // Default: 0.000005 SOL in lamports (~2.5 cents)
   }
 }
 

@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Send, Sparkles, Loader2, AlertCircle, Radio, CheckCircle, ChevronDown } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
-import { Connection, VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
+import { secureRPCClient } from "@/lib/utils/rpc-client"
 
 interface Message {
   id: string
@@ -108,9 +109,7 @@ export function SolanaCopilot() {
 
     const fetchBalance = async () => {
       try {
-        const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
-        const connection = new Connection(rpcUrl, "confirmed")
-        const balance = await connection.getBalance(publicKey)
+        const balance = await secureRPCClient.getBalance(publicKey.toBase58())
         setWalletBalance(balance / LAMPORTS_PER_SOL)
         console.log("[v0] Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
       } catch (error) {
@@ -214,13 +213,9 @@ export function SolanaCopilot() {
 
       const signedTransaction = await signTransaction(transaction)
 
-      const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
-      const connection = new Connection(rpcUrl, "confirmed")
-
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      })
+      const signature = await secureRPCClient.sendTransaction(
+        Buffer.from(signedTransaction.serialize()).toString("base64"),
+      )
 
       console.log(`[v0] Transaction sent:`, signature)
 
@@ -229,18 +224,33 @@ export function SolanaCopilot() {
         description: `${toolName} transaction is being confirmed...`,
       })
 
-      const latestBlockhash = await connection.getLatestBlockhash()
-      await connection.confirmTransaction({
-        signature,
-        ...latestBlockhash,
-      })
+      let confirmed = false
+      for (let i = 0; i < 30; i++) {
+        try {
+          const tx = await secureRPCClient.getTransaction(signature)
+          if (tx) {
+            confirmed = true
+            break
+          }
+        } catch (e) {
+          // Transaction not confirmed yet
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
 
-      toast({
-        title: "Success!",
-        description: `${toolName} confirmed on-chain`,
-      })
+      if (confirmed) {
+        toast({
+          title: "Success!",
+          description: `${toolName} confirmed on-chain`,
+        })
+      } else {
+        toast({
+          title: "Transaction Pending",
+          description: `${toolName} submitted. Please check Explorer for status.`,
+        })
+      }
 
-      const newBalance = await connection.getBalance(publicKey)
+      const newBalance = await secureRPCClient.getBalance(publicKey.toBase58())
       setWalletBalance(newBalance / LAMPORTS_PER_SOL)
 
       return signature

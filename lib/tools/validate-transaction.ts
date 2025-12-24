@@ -1,5 +1,6 @@
-import { type Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { estimateGasFee } from "@/lib/services/jupiter"
+import { secureRPCClient } from "@/lib/utils/rpc-client"
 
 export interface TransactionValidation {
   valid: boolean
@@ -15,13 +16,11 @@ export interface TransactionValidation {
 export async function validateWalletBalance(
   walletAddress: string,
   requiredAmountLamports: number,
-  connection: Connection,
 ): Promise<TransactionValidation> {
   try {
     console.log("[v0] Validating wallet balance for:", walletAddress)
 
-    // Get wallet SOL balance
-    const balance = await connection.getBalance(new PublicKey(walletAddress))
+    const balance = await secureRPCClient.getBalance(walletAddress)
     const balanceSOL = balance / LAMPORTS_PER_SOL
 
     const estimatedFee = await estimateGasFee()
