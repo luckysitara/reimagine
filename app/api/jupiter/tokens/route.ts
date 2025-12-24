@@ -14,9 +14,9 @@ const POPULAR_TOKENS = [
     decimals: 9,
   },
   {
-    address: "EPjFWaLb3bKP3qxKbF2WwR9dRi12gm1xQYYFnKn9G6bP",
+    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     symbol: "USDC",
-    name: "USDC Coin",
+    name: "USD Coin",
     decimals: 6,
   },
   {
@@ -77,30 +77,64 @@ const POPULAR_TOKENS = [
 
 async function fetchJupiterTokenList(): Promise<any[]> {
   try {
-    const response = await fetch("https://token.jup.ag/all", {
+    // Try primary endpoint first
+    let response = await fetch("https://token.jup.ag/all", {
       headers: {
         Accept: "application/json",
       },
     })
 
     if (!response.ok) {
-      console.error("[v0] Jupiter strict token list error:", response.status)
+      console.error("[v0] Primary Jupiter token endpoint failed, trying secondary:", response.status)
+      // Try secondary endpoint
+      response = await fetch("https://api.jup.ag/strict", {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+    }
+
+    if (!response.ok) {
+      console.error("[v0] Jupiter token list endpoints failed:", response.status)
       return POPULAR_TOKENS
     }
 
     const tokens = await response.json()
 
     if (!Array.isArray(tokens)) {
-      console.error("[v0] Jupiter tokens response is not an array")
+      console.error("[v0] Jupiter tokens response is not an array, type:", typeof tokens)
+      // If it's an object with a 'tokens' property
+      if (tokens && typeof tokens === "object" && "tokens" in tokens && Array.isArray(tokens.tokens)) {
+        const filteredTokens = tokens.tokens
+          .filter((token: any) => token.address && token.symbol && token.name && typeof token.decimals === "number")
+          .slice(0, 5000)
+        console.log("[v0] Extracted token list from wrapper object:", filteredTokens.length, "tokens")
+        return filteredTokens
+      }
       return POPULAR_TOKENS
     }
 
-    // Map and validate token structure
-    return tokens
-      .filter((token: any) => token.address && token.symbol && token.name && typeof token.decimals === "number")
-      .slice(0, 2000) // Limit to prevent memory issues
+    // Validate and filter tokens
+    const filteredTokens = tokens
+      .filter((token: any) => {
+        return (
+          token &&
+          typeof token === "object" &&
+          token.address &&
+          typeof token.address === "string" &&
+          token.symbol &&
+          typeof token.symbol === "string" &&
+          typeof token.decimals === "number" &&
+          token.decimals >= 0 &&
+          token.decimals <= 255
+        )
+      })
+      .slice(0, 5000) // Limit to prevent memory issues
+
+    console.log("[v0] Successfully fetched", filteredTokens.length, "tokens from Jupiter")
+    return filteredTokens.length > 0 ? filteredTokens : POPULAR_TOKENS
   } catch (error) {
-    console.error("[v0] Jupiter token fetch error:", error)
+    console.error("[v0] Jupiter token fetch error:", error instanceof Error ? error.message : error)
     return POPULAR_TOKENS
   }
 }
@@ -108,8 +142,8 @@ async function fetchJupiterTokenList(): Promise<any[]> {
 export async function GET() {
   try {
     const now = Date.now()
-    if (cachedTokens && now - cacheTimestamp < CACHE_TTL) {
-      console.log("[v0] Returning cached token list")
+    if (cachedTokens && now - cacheTimestamp < 600000) {
+      console.log("[v0] Returning cached token list:", cachedTokens.length, "tokens")
       return NextResponse.json(cachedTokens, {
         headers: {
           "Cache-Control": "public, max-age=300",
@@ -118,23 +152,26 @@ export async function GET() {
     }
 
     // Fetch fresh token list
+    console.log("[v0] Fetching fresh token list from Jupiter...")
     const tokens = await fetchJupiterTokenList()
 
     // Update cache
     cachedTokens = tokens
     cacheTimestamp = now
 
+    console.log("[v0] Token list endpoint returning", tokens.length, "tokens")
+
     return NextResponse.json(tokens, {
       headers: {
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=7200",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
       },
     })
   } catch (error) {
-    console.error("[v0] Tokens endpoint error:", error)
+    console.error("[v0] Tokens endpoint error:", error instanceof Error ? error.message : error)
 
     return NextResponse.json(POPULAR_TOKENS, {
       headers: {
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "public, max-age=60",
       },
     })
   }

@@ -41,17 +41,21 @@ const EXAMPLE_PROMPTS = [
   "Analyze news for SOL",
 ]
 
+const STORAGE_KEY = "copilot_chat_history"
+const INITIAL_WELCOME = {
+  id: "welcome",
+  role: "assistant" as const,
+  content:
+    "Hello! I'm your AI DeFi assistant. I can help you swap tokens, create limit/DCA orders, launch new tokens, analyze your portfolio, monitor news, and more. What would you like to do?",
+}
+
 export function SolanaCopilot() {
   const { publicKey, signTransaction } = useWallet()
   const [autopilotMode, setAutopilotMode] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Hello! I'm your AI DeFi assistant. I can help you swap tokens, create limit/DCA orders, launch new tokens, analyze your portfolio, monitor news, and more. What would you like to do?",
-    },
-  ])
+
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
+
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +63,42 @@ export function SolanaCopilot() {
   const [showScrollButton, setShowScrollButton] = useState(false)
   const scrollViewportRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+
+  useEffect(() => {
+    const loadChatHistory = () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed)
+            console.log("[v0] Loaded chat history:", parsed.length, "messages")
+          } else {
+            setMessages([INITIAL_WELCOME])
+          }
+        } else {
+          setMessages([INITIAL_WELCOME])
+        }
+      } catch (error) {
+        console.error("[v0] Failed to load chat history:", error)
+        setMessages([INITIAL_WELCOME])
+      }
+      setMessagesLoaded(true)
+    }
+
+    loadChatHistory()
+  }, [])
+
+  useEffect(() => {
+    if (messagesLoaded && messages.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+        console.log("[v0] Saved chat history to localStorage")
+      } catch (error) {
+        console.error("[v0] Failed to save chat history:", error)
+      }
+    }
+  }, [messages, messagesLoaded])
 
   useEffect(() => {
     if (!publicKey) {
@@ -79,7 +119,7 @@ export function SolanaCopilot() {
     }
 
     fetchBalance()
-    const interval = setInterval(fetchBalance, 30000) // Refresh every 30 seconds
+    const interval = setInterval(fetchBalance, 30000)
 
     return () => clearInterval(interval)
   }, [publicKey])
@@ -89,38 +129,39 @@ export function SolanaCopilot() {
       if (!scrollViewportRef.current) return
 
       const viewport = scrollViewportRef.current
-      const isScrolledToBottom = Math.abs(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight) < 10
+      // Check if scrolled to bottom (with 50px tolerance)
+      const isScrolledToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 50
 
       setShowScrollButton(!isScrolledToBottom)
     }
 
     const viewport = scrollViewportRef.current
     if (viewport) {
-      viewport.addEventListener("scroll", handleScroll)
+      viewport.addEventListener("scroll", handleScroll, { passive: true })
       return () => viewport.removeEventListener("scroll", handleScroll)
     }
   }, [])
 
   useEffect(() => {
+    if (!messagesLoaded) return
+
     const scrollToBottom = () => {
       if (scrollViewportRef.current) {
-        const viewport = scrollViewportRef.current
-        viewport.scrollTop = viewport.scrollHeight
+        // Use setTimeout to ensure DOM has updated
+        setTimeout(() => {
+          if (scrollViewportRef.current) {
+            scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight
+          }
+        }, 50)
       }
     }
 
-    // Use requestAnimationFrame for smooth scrolling
-    const timer = requestAnimationFrame(() => {
-      scrollToBottom()
-    })
-
-    return () => cancelAnimationFrame(timer)
-  }, [messages])
+    scrollToBottom()
+  }, [messages, messagesLoaded])
 
   const scrollToBottom = () => {
     if (scrollViewportRef.current) {
-      const viewport = scrollViewportRef.current
-      viewport.scrollTop = viewport.scrollHeight
+      scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight
       setShowScrollButton(false)
     }
   }

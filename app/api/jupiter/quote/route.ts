@@ -21,17 +21,17 @@ export async function GET(request: Request) {
     }
 
     const url =
-      `${JUPITER_ULTRA_API}/order?` +
+      `${JUPITER_ULTRA_API}/quote?` +
       `inputMint=${inputMint}&` +
       `outputMint=${outputMint}&` +
       `amount=${amount}&` +
       `taker=${taker}&` +
       `slippageBps=${slippageBps}`
 
-    console.log("[v0] Proxying Jupiter Ultra order request:", url)
+    console.log("[v0] Fetching Jupiter Ultra quote from:", url)
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
 
     const headers: HeadersInit = {
       Accept: "application/json",
@@ -56,15 +56,26 @@ export async function GET(request: Request) {
       )
     }
 
-    const order = await response.json()
+    const quote = await response.json()
 
-    return NextResponse.json(order, {
+    if (quote.error || !quote.outAmount) {
+      console.error("[v0] Jupiter returned error:", quote.error || "No outAmount in response")
+      return NextResponse.json(
+        {
+          error: quote.error || "No swap route available for this pair",
+          details: quote,
+        },
+        { status: 400 },
+      )
+    }
+
+    return NextResponse.json(quote, {
       headers: {
         "Cache-Control": "no-store, max-age=0",
       },
     })
   } catch (error) {
-    console.error("[v0] Jupiter Ultra order proxy error:", error)
+    console.error("[v0] Jupiter Ultra quote proxy error:", error)
 
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json(
@@ -74,7 +85,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch order" },
+      { error: error instanceof Error ? error.message : "Failed to fetch quote" },
       { status: 500 },
     )
   }

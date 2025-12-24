@@ -199,6 +199,10 @@ export async function getJupiterQuote(
       throw new Error("Wallet address is required. Please connect your wallet to get quotes.")
     }
 
+    if (amount <= 0) {
+      throw new Error("Amount must be greater than 0")
+    }
+
     const params = new URLSearchParams({
       inputMint,
       outputMint,
@@ -209,44 +213,59 @@ export async function getJupiterQuote(
 
     const url = `/api/jupiter/order?${params.toString()}`
 
-    console.log("[v0] Fetching Jupiter Ultra order from:", url)
+    console.log("[v0] Fetching Jupiter quote:", {
+      inputMint: inputMint.slice(0, 8),
+      outputMint: outputMint.slice(0, 8),
+      amount,
+    })
 
-    const response = await fetch(url)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId))
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       const errorMsg = errorData.error || errorData.details?.errorMessage || `HTTP ${response.status}`
 
-      if (errorMsg.includes("Insufficient funds") || errorMsg.includes("insufficient balance")) {
+      console.error("[v0] Jupiter quote error:", errorMsg)
+
+      if (errorMsg.includes("Insufficient") || errorMsg.includes("insufficient")) {
         throw new Error(
           "Insufficient balance for this swap. Please reduce the amount or add more funds to your wallet.",
         )
       }
 
-      throw new Error(errorMsg)
+      if (errorMsg.includes("no route") || errorMsg.includes("No swap route") || errorMsg.includes("liquidity")) {
+        throw new Error(`No liquidity available for this token pair. Try a different pair or smaller amount.`)
+      }
+
+      throw new Error(errorMsg || "Failed to get quote from Jupiter")
     }
 
     const order = await response.json()
-    console.log("[v0] Jupiter Ultra order received - has transaction:", !!order.transaction)
 
     if (order.error || order.errorMessage) {
       const errorMsg = order.errorMessage || order.error
 
-      if (errorMsg.includes("Insufficient funds") || order.errorCode === 1) {
-        throw new Error("Insufficient balance for this swap (including fees). Please reduce the amount.")
+      if (errorMsg.includes("Insufficient") || order.errorCode === 1) {
+        throw new Error("Insufficient balance for this swap (including network fees).")
       }
 
       throw new Error(errorMsg)
     }
 
-    if (!order.transaction) {
-      console.error("[v0] Order response missing transaction field. Response keys:", Object.keys(order))
-      throw new Error("No valid swap route found for this token pair. The tokens may not have sufficient liquidity.")
+    if (!order.transaction || order.transaction.length === 0) {
+      console.error("[v0] Order response missing valid transaction. Response:", Object.keys(order).join(", "))
+      throw new Error("No valid swap route found. Try reducing the amount or selecting a different token pair.")
     }
 
+    console.log("[v0] Quote received successfully")
     return order
   } catch (error) {
-    console.error("[v0] Jupiter order error:", error)
+    console.error("[v0] getJupiterQuote error:", error)
     throw error
   }
 }
