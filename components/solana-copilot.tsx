@@ -763,8 +763,8 @@ export function SolanaCopilot() {
       </CardHeader>
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ScrollArea className="flex-1 w-full px-3 md:px-4 py-3 md:py-4">
-          <div className="space-y-3 md:space-y-4 pr-4">
+        <ScrollArea className="flex-1 w-full">
+          <div className="space-y-3 md:space-y-4 px-3 md:px-4 py-3 md:py-4">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-8 md:py-12">
                 <div className="mb-4">
