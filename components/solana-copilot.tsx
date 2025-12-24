@@ -2,14 +2,13 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Send, Sparkles, Loader2, AlertCircle, CheckCircle } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { Card, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { secureRPCClient } from "@/lib/utils/rpc-client"
 
@@ -60,7 +59,7 @@ export function SolanaCopilot() {
   const [error, setError] = useState<string | null>(null)
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
-  const scrollViewportRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -129,45 +128,43 @@ export function SolanaCopilot() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (!scrollViewportRef.current) return
+      if (!scrollContainerRef.current) return
 
-      const viewport = scrollViewportRef.current
-      // Check if scrolled to bottom (with 50px tolerance)
-      const isScrolledToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 50
+      const container = scrollContainerRef.current
+      const isScrolledToBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
 
-      setShowScrollButton(!isScrolledToBottom)
+      setShowScrollButton(!isScrolledToBottom && container.scrollHeight > container.clientHeight)
     }
 
-    const viewport = scrollViewportRef.current
-    if (viewport) {
-      viewport.addEventListener("scroll", handleScroll, { passive: true })
-      return () => viewport.removeEventListener("scroll", handleScroll)
+    const container = scrollContainerRef.current
+    if (container) {
+      container.addEventListener("scroll", handleScroll, { passive: true })
+      return () => container.removeEventListener("scroll", handleScroll)
     }
   }, [])
 
   useEffect(() => {
-    if (!messagesLoaded) return
+    if (!messagesLoaded || !scrollContainerRef.current) return
 
     const scrollToBottom = () => {
-      if (scrollViewportRef.current) {
-        // Use setTimeout to ensure DOM has updated
+      if (scrollContainerRef.current) {
         setTimeout(() => {
-          if (scrollViewportRef.current) {
-            scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
           }
-        }, 50)
+        }, 100)
       }
     }
 
     scrollToBottom()
   }, [messages, messagesLoaded])
 
-  const scrollToBottom = () => {
-    if (scrollViewportRef.current) {
-      scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight
+  const scrollToBottom = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
       setShowScrollButton(false)
     }
-  }
+  }, [])
 
   const checkBalanceForSwap = async (
     inputToken: string,
@@ -741,7 +738,7 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex flex-col h-screen md:h-[600px] rounded-lg border border-border bg-background overflow-hidden">
+    <Card className="flex flex-col h-full rounded-lg border border-border bg-background overflow-hidden">
       <CardHeader className="flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -763,10 +760,10 @@ export function SolanaCopilot() {
       </CardHeader>
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ScrollArea className="flex-1 w-full">
+        <div ref={scrollContainerRef} className="flex-1 w-full overflow-y-auto overflow-x-hidden">
           <div className="space-y-3 md:space-y-4 px-3 md:px-4 py-3 md:py-4">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center py-8 md:py-12">
+              <div className="flex flex-col items-center justify-center h-full text-center py-8 md:py-12 min-h-[300px]">
                 <div className="mb-4">
                   <div className="h-12 w-12 md:h-16 md:w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                     <Sparkles className="h-6 w-6 md:h-8 md:w-8 text-primary" />
@@ -778,34 +775,45 @@ export function SolanaCopilot() {
                 </p>
               </div>
             ) : (
-              messages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-xs md:max-w-md lg:max-w-lg px-3 md:px-4 py-2 md:py-3 rounded-lg text-xs md:text-sm ${
-                      message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                    }`}
-                  >
-                    <p className="break-words">{message.content}</p>
-                    {message.toolCalls && message.toolCalls.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {message.toolCalls.map((tool, idx) => (
-                          <div key={idx} className="border-l-2 border-current pl-2 text-xs opacity-75">
-                            <p className="font-semibold">{tool.toolName}</p>
-                            {tool.result && (
-                              <p className="mt-1 text-xs">
-                                {typeof tool.result === "string"
-                                  ? tool.result
-                                  : tool.result.error || JSON.stringify(tool.result).slice(0, 100)}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              <>
+                {messages.map((message) => (
+                  <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`px-3 md:px-4 py-2 md:py-3 rounded-lg text-xs md:text-sm flex-shrink-0 max-w-[85%] md:max-w-[70%] ${
+                        message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                      }`}
+                    >
+                      <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                      {message.toolCalls && message.toolCalls.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {message.toolCalls.map((tool, idx) => (
+                            <div key={idx}>{renderToolResult(tool, idx)}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </>
             )}
+
+            {messages.length > 0 && !isLoading && (
+              <div className="mt-6 pt-4 border-t border-border">
+                <p className="text-xs font-semibold text-muted-foreground mb-3">Try asking:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {EXAMPLE_PROMPTS.map((prompt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleExamplePrompt(prompt)}
+                      className="text-left px-3 py-2 rounded-md bg-background border border-border hover:border-primary hover:bg-primary/5 transition-colors text-xs text-foreground"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-3 md:px-4 py-2 md:py-3">
@@ -817,6 +825,7 @@ export function SolanaCopilot() {
                 </div>
               </div>
             )}
+
             {error && (
               <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 md:px-4 py-2 md:py-3 text-destructive text-xs md:text-sm">
                 <p className="font-semibold">Error</p>
@@ -824,7 +833,20 @@ export function SolanaCopilot() {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
+
+        {showScrollButton && (
+          <div className="absolute bottom-20 right-4 md:right-6">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={scrollToBottom}
+              className="rounded-full h-8 w-8 p-0 bg-transparent"
+            >
+              ↓
+            </Button>
+          </div>
+        )}
       </div>
 
       <CardFooter className="flex-shrink-0 border-t border-border p-3 md:p-4">
