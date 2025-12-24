@@ -5,7 +5,6 @@ const JUPITER_ULTRA_API = "https://api.jup.ag/ultra/v1"
 
 const JUPITER_API_KEY = typeof window === "undefined" ? process.env.JUPITER_API_KEY : undefined
 
-// Helper to add API key header if available
 function getJupiterHeaders(): HeadersInit {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -48,69 +47,143 @@ export interface SwapResult {
 
 export async function getJupiterTokenList(): Promise<JupiterToken[]> {
   try {
-    const response = await fetch("/api/jupiter/tokens")
+    const response = await fetch("/api/jupiter/tokens", {
+      headers: {
+        "Cache-Control": "max-age=300",
+      },
+    })
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `Failed to fetch token list: ${response.statusText}`)
+      console.error("[v0] Token list error:", errorData)
+      return []
     }
-    const tokens = await response.json()
-    return Array.isArray(tokens) ? tokens : []
+
+    const data = await response.json()
+
+    // Handle both array and object responses
+    if (Array.isArray(data)) {
+      return data.filter((token: any) => token.address && token.symbol && token.decimals !== undefined)
+    }
+
+    if (typeof data === "object" && data !== null) {
+      return Object.values(data)
+        .filter(
+          (token: any) =>
+            token && typeof token === "object" && token.address && token.symbol && token.decimals !== undefined,
+        )
+        .slice(0, 2000)
+    }
+
+    console.warn("[v0] Token list in unexpected format:", typeof data)
+    return []
   } catch (error) {
-    console.error("[v0] Jupiter token list error:", error)
-    throw error
+    console.error("[v0] Jupiter token list fetch error:", error)
+    return []
+  }
+}
+
+export async function findTokenBySymbol(symbol: string): Promise<JupiterToken | null> {
+  try {
+    const tokens = await getJupiterTokenList()
+
+    if (tokens.length === 0) {
+      console.error("[v0] No tokens available for lookup")
+      return null
+    }
+
+    const upperSymbol = symbol.toUpperCase().trim()
+
+    // 1. Exact symbol match
+    let token = tokens.find(
+      (t) => t.symbol.toUpperCase() === upperSymbol || t.address.toLowerCase() === symbol.toLowerCase(),
+    )
+    if (token) {
+      console.log("[v0] Found token by exact match:", token.symbol)
+      return token
+    }
+
+    // 2. Partial match
+    token = tokens.find((t) => t.symbol.toUpperCase().includes(upperSymbol))
+    if (token) {
+      console.log("[v0] Found token by partial match:", token.symbol)
+      return token
+    }
+
+    // 3. Name match
+    token = tokens.find((t) => t.name.toUpperCase().includes(upperSymbol))
+    if (token) {
+      console.log("[v0] Found token by name match:", token.symbol)
+      return token
+    }
+
+    console.warn("[v0] Token not found:", symbol)
+    return null
+  } catch (error) {
+    console.error("[v0] Token lookup error:", error)
+    return null
   }
 }
 
 export async function searchJupiterTokens(query: string): Promise<JupiterToken[]> {
   try {
-    const encodedQuery = encodeURIComponent(query)
-    const response = await fetch(`/api/jupiter/search?query=${encodedQuery}`)
+    const tokens = await getJupiterTokenList()
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `Jupiter search failed: ${response.statusText}`)
+    if (tokens.length === 0) {
+      return []
     }
 
-    const tokens = await response.json()
-    return Array.isArray(tokens) ? tokens : []
+    const upperQuery = query.toUpperCase().trim()
+
+    return tokens
+      .filter(
+        (token) =>
+          token.symbol.toUpperCase().includes(upperQuery) ||
+          token.name.toUpperCase().includes(upperQuery) ||
+          token.address.toLowerCase() === query.toLowerCase(),
+      )
+      .slice(0, 50)
   } catch (error) {
-    console.error("[v0] Jupiter search error:", error)
-    throw error
+    console.error("[v0] Search error:", error)
+    return []
   }
 }
 
-export async function getJupiterHoldings(walletAddress: string) {
+export async function estimateGasFee(): Promise<number> {
   try {
-    const response = await fetch(`${JUPITER_ULTRA_API}/holdings/${walletAddress}`, {
-      headers: getJupiterHeaders(),
+    // Get recent transaction prices
+    const response = await fetch("https://api.mainnet-beta.solana.com", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getRecentPrioritizationFees",
+        params: [[]], // Get fees for all transactions
+      }),
     })
 
     if (!response.ok) {
-      throw new Error(`Jupiter holdings failed: ${response.statusText}`)
+      return 5000 // Default fallback: 0.000005 SOL
     }
 
-    return await response.json()
-  } catch (error) {
-    console.error("[v0] Jupiter holdings error:", error)
-    throw error
-  }
-}
+    const data = await response.json()
+    const fees = data.result || []
 
-export async function getJupiterShield(mints: string[]) {
-  try {
-    const mintsParam = mints.join(",")
-    const response = await fetch(`${JUPITER_ULTRA_API}/shield?mints=${mintsParam}`, {
-      headers: getJupiterHeaders(),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Jupiter shield failed: ${response.statusText}`)
+    if (fees.length === 0) {
+      return 5000
     }
 
-    return await response.json()
+    // Get median fee
+    const sortedFees = fees.map((f: any) => f.prioritizationFee).sort((a: number, b: number) => a - b)
+    const medianFee = sortedFees[Math.floor(sortedFees.length / 2)] || 5000
+
+    return medianFee
   } catch (error) {
-    console.error("[v0] Jupiter shield error:", error)
-    throw error
+    console.error("[v0] Gas fee estimation error:", error)
+    return 5000 // Default: 0.000005 SOL in lamports
   }
 }
 
@@ -144,7 +217,7 @@ export async function getJupiterQuote(
       const errorData = await response.json().catch(() => ({}))
       const errorMsg = errorData.error || errorData.details?.errorMessage || `HTTP ${response.status}`
 
-      if (errorMsg.includes("Insufficient funds")) {
+      if (errorMsg.includes("Insufficient funds") || errorMsg.includes("insufficient balance")) {
         throw new Error(
           "Insufficient balance for this swap. Please reduce the amount or add more funds to your wallet.",
         )
@@ -366,13 +439,25 @@ export async function executeSwap(
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
 
     if (errorMessage.includes("User rejected") || errorMessage.includes("cancelled")) {
-      return { success: false, error: "Transaction cancelled by user" }
+      return {
+        success: false,
+        error: "Transaction cancelled by user",
+      }
     } else if (errorMessage.includes("Insufficient") || errorMessage.includes("insufficient")) {
-      return { success: false, error: "Insufficient balance for transaction (including network fees)" }
+      return {
+        success: false,
+        error: "Insufficient balance for transaction (including network fees)",
+      }
     } else if (errorMessage.includes("deserialize") || errorMessage.includes("buffer")) {
-      return { success: false, error: "Invalid transaction format from Jupiter API" }
+      return {
+        success: false,
+        error: "Invalid transaction format from Jupiter API",
+      }
     } else if (errorMessage.includes("missing") || errorMessage.includes("empty")) {
-      return { success: false, error: "Transaction data is missing from API response" }
+      return {
+        success: false,
+        error: "Transaction data is missing from API response",
+      }
     }
 
     return {

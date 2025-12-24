@@ -28,13 +28,15 @@ export interface DCAAccount {
 }
 
 export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: string }> {
+  const amountAsNumber = typeof params.amount === "string" ? Number.parseInt(params.amount) : params.amount
+
   const requestBody = {
     user: params.payer,
     inputMint: params.inputMint,
     outputMint: params.outputMint,
     params: {
       time: {
-        inAmount: Number(params.amount), // Convert string to number
+        inAmount: amountAsNumber,
         numberOfOrders: params.numberOfOrders,
         interval: params.cycleFrequency,
         minPrice: params.minOutAmountPerCycle ? Number(params.minOutAmountPerCycle) : null,
@@ -44,9 +46,12 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
     },
   }
 
-  console.log("[v0] Sending DCA request:", JSON.stringify(requestBody, null, 2))
+  console.log("[v0] Creating DCA order with request:", JSON.stringify(requestBody, null, 2))
 
-  const response = await fetch(`${JUPITER_API_URLS.recurring}/createOrder`, {
+  const url = `${JUPITER_API_URLS.recurring}/createOrder`
+  console.log("[v0] Sending DCA order to:", url)
+
+  const response = await fetch(url, {
     method: "POST",
     headers: getJupiterHeaders(),
     body: JSON.stringify(requestBody),
@@ -55,15 +60,25 @@ export async function createDCAOrder(params: CreateDCAParams): Promise<{ tx: str
   if (!response.ok) {
     const text = await response.text()
     console.error("[v0] DCA API error response:", text)
+
     try {
       const error = JSON.parse(text)
-      throw new Error(`DCA creation failed: ${response.statusText} - ${JSON.stringify(error)}`)
-    } catch {
-      throw new Error(`DCA creation failed: ${response.statusText} - ${text}`)
+      if (error.error) {
+        throw new Error(`DCA creation failed: ${error.error}`)
+      }
+      throw new Error(`DCA creation failed: ${JSON.stringify(error)}`)
+    } catch (parseError) {
+      if (parseError instanceof SyntaxError) {
+        throw new Error(`DCA creation failed: ${response.statusText} - ${text}`)
+      }
+      throw parseError
     }
   }
 
-  return await response.json()
+  const result = await response.json()
+  console.log("[v0] DCA order created successfully:", result)
+
+  return result
 }
 
 export async function closeDCAOrder(dcaPubkey: string, user: string): Promise<{ tx: string }> {

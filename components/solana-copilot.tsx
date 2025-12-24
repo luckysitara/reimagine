@@ -3,9 +3,9 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, Loader2, AlertCircle, Radio, CheckCircle, XCircle } from "lucide-react"
+import { Send, Sparkles, Loader2, AlertCircle, Radio, CheckCircle, ChevronDown } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
-import { Connection, VersionedTransaction } from "@solana/web3.js"
+import { Connection, VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,12 @@ interface Message {
     args: Record<string, unknown>
     result?: any
   }>
+}
+
+interface ToolCall {
+  toolName: string
+  args: Record<string, unknown>
+  result?: any
 }
 
 const EXAMPLE_PROMPTS = [
@@ -49,24 +55,105 @@ export function SolanaCopilot() {
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastRequestTime, setLastRequestTime] = useState<number>(0)
-  const [requestCount, setRequestCount] = useState<number>(0)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const scrollViewportRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRequestCount(0)
-    }, 60000)
+    if (!publicKey) {
+      setWalletBalance(null)
+      return
+    }
+
+    const fetchBalance = async () => {
+      try {
+        const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com"
+        const connection = new Connection(rpcUrl, "confirmed")
+        const balance = await connection.getBalance(publicKey)
+        setWalletBalance(balance / LAMPORTS_PER_SOL)
+        console.log("[v0] Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+      } catch (error) {
+        console.error("[v0] Failed to fetch balance:", error)
+      }
+    }
+
+    fetchBalance()
+    const interval = setInterval(fetchBalance, 30000) // Refresh every 30 seconds
 
     return () => clearInterval(interval)
+  }, [publicKey])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!scrollViewportRef.current) return
+
+      const viewport = scrollViewportRef.current
+      const isScrolledToBottom = Math.abs(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight) < 10
+
+      setShowScrollButton(!isScrolledToBottom)
+    }
+
+    const viewport = scrollViewportRef.current
+    if (viewport) {
+      viewport.addEventListener("scroll", handleScroll)
+      return () => viewport.removeEventListener("scroll", handleScroll)
+    }
   }, [])
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+    const scrollToBottom = () => {
+      if (scrollViewportRef.current) {
+        const viewport = scrollViewportRef.current
+        viewport.scrollTop = viewport.scrollHeight
+      }
     }
+
+    // Use requestAnimationFrame for smooth scrolling
+    const timer = requestAnimationFrame(() => {
+      scrollToBottom()
+    })
+
+    return () => cancelAnimationFrame(timer)
   }, [messages])
+
+  const scrollToBottom = () => {
+    if (scrollViewportRef.current) {
+      const viewport = scrollViewportRef.current
+      viewport.scrollTop = viewport.scrollHeight
+      setShowScrollButton(false)
+    }
+  }
+
+  const checkBalanceForSwap = async (
+    inputToken: string,
+    amount: number,
+  ): Promise<{ valid: boolean; message?: string }> => {
+    if (!publicKey) {
+      return { valid: false, message: "Please connect your wallet" }
+    }
+
+    if (walletBalance === null) {
+      return { valid: false, message: "Unable to fetch wallet balance. Please try again." }
+    }
+
+    // If swapping SOL, we need the amount + gas fee
+    if (inputToken.toUpperCase() === "SOL") {
+      const estimatedGasSOL = 0.00025 // ~2500 lamports
+      const totalNeeded = amount + estimatedGasSOL
+
+      if (walletBalance < totalNeeded) {
+        return {
+          valid: false,
+          message: `Insufficient balance. You have ${walletBalance.toFixed(
+            3,
+          )} SOL but need ${totalNeeded.toFixed(3)} SOL (${amount} + ${estimatedGasSOL} for gas)`,
+        }
+      }
+    }
+
+    return { valid: true }
+  }
 
   const handleSignTransaction = async (transactionBase64: string, toolName: string) => {
     if (!signTransaction || !publicKey) {
@@ -112,14 +199,33 @@ export function SolanaCopilot() {
         description: `${toolName} confirmed on-chain`,
       })
 
+      const newBalance = await connection.getBalance(publicKey)
+      setWalletBalance(newBalance / LAMPORTS_PER_SOL)
+
       return signature
     } catch (error) {
       console.error(`[v0] Transaction signing error:`, error)
-      toast({
-        title: "Transaction Failed",
-        description: error instanceof Error ? error.message : "Failed to sign transaction",
-        variant: "destructive",
-      })
+      const errorMessage = error instanceof Error ? error.message : "Failed to sign transaction"
+
+      if (errorMessage.includes("User rejected")) {
+        toast({
+          title: "Transaction Cancelled",
+          description: "You cancelled the transaction signature",
+          variant: "destructive",
+        })
+      } else if (errorMessage.includes("insufficient funds")) {
+        toast({
+          title: "Insufficient Balance",
+          description: "Your wallet doesn't have enough SOL to cover transaction fees",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Transaction Failed",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
       throw error
     }
   }
@@ -129,23 +235,10 @@ export function SolanaCopilot() {
 
     if (!input.trim() || isLoading) return
 
-    const now = Date.now()
-    const timeSinceLastRequest = now - lastRequestTime
-
-    if (requestCount >= 10 && timeSinceLastRequest < 60000) {
-      setError(
-        "You're sending messages too quickly. Please wait a moment before trying again to avoid hitting rate limits.",
-      )
+    if (!publicKey) {
+      setError("Please connect your wallet to use the copilot")
       return
     }
-
-    if (timeSinceLastRequest < 2000) {
-      setError("Please wait a moment before sending another message.")
-      return
-    }
-
-    setLastRequestTime(now)
-    setRequestCount((prev) => prev + 1)
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -298,7 +391,7 @@ export function SolanaCopilot() {
     }
   }
 
-  const renderToolResult = (toolCall: any, idx: number) => {
+  const renderToolResult = (toolCall: ToolCall, idx: number) => {
     const result = toolCall.result
 
     if (!result) {
@@ -313,13 +406,27 @@ export function SolanaCopilot() {
     }
 
     if (!result.success) {
+      const isBalanceError = result.error?.toLowerCase().includes("insufficient")
+
       return (
-        <div key={idx} className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+        <div
+          key={idx}
+          className={`rounded-md border p-3 ${isBalanceError ? "border-red-500/50 bg-red-500/10" : "border-destructive/50 bg-destructive/10"}`}
+        >
           <div className="flex items-center gap-2">
-            <XCircle className="h-4 w-4 text-destructive" />
+            <AlertCircle className={`h-4 w-4 ${isBalanceError ? "text-red-500" : "text-destructive"}`} />
             <span className="text-xs font-semibold">{toolCall.toolName} failed</span>
           </div>
-          <p className="mt-2 text-xs text-destructive">{result.error}</p>
+          <p className={`mt-2 text-xs ${isBalanceError ? "text-red-400" : "text-destructive"}`}>{result.error}</p>
+
+          {isBalanceError && walletBalance !== null && (
+            <div className="mt-3 rounded bg-background/50 p-2 text-xs">
+              <p className="text-gray-400">Current balance: {walletBalance.toFixed(3)} SOL</p>
+              <p className="mt-1 text-xs text-gray-500">
+                To proceed, please add more SOL to your wallet and try again.
+              </p>
+            </div>
+          )}
         </div>
       )
     }
@@ -390,7 +497,6 @@ export function SolanaCopilot() {
       )
     }
 
-    // Handle different tool result types with specialized UI
     if (result.type === "limit_order" || result.type === "dca_order" || result.type === "token_creation") {
       return (
         <div key={idx} className="space-y-2 rounded-md border border-green-500/50 bg-green-500/10 p-3">
@@ -453,6 +559,10 @@ export function SolanaCopilot() {
                 <span className="text-muted-foreground">Supply:</span>
                 <span className="font-mono">{result.supply}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gas Fee:</span>
+                <span className="font-mono">~{(0.1).toFixed(4)} SOL</span>
+              </div>
               {result.mintAddress && (
                 <div className="mt-2 rounded bg-background p-2">
                   <span className="text-muted-foreground">Mint:</span>
@@ -505,6 +615,12 @@ export function SolanaCopilot() {
                   </span>
                 </div>
               )}
+              {result.estimatedGasFee && (
+                <div className="flex justify-between border-t border-border pt-1 mt-1">
+                  <span className="text-muted-foreground">Gas Fee:</span>
+                  <span className="font-mono text-amber-400">~{result.estimatedGasFee.toFixed(6)} SOL</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -519,7 +635,6 @@ export function SolanaCopilot() {
       )
     }
 
-    // Default tool result display
     return (
       <div key={idx} className="rounded-md border border-border bg-background p-3">
         <div className="flex items-center gap-2">
@@ -532,93 +647,124 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex h-screen md:h-[600px] flex-col">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+    <Card className="flex flex-col h-full w-full bg-dark-surface border-dark-border">
+      <CardHeader className="pb-2 md:pb-3 lg:pb-4 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent flex-shrink-0">
+              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
             </div>
-            <div>
-              <CardTitle>AI Copilot</CardTitle>
-              <CardDescription>Your intelligent DeFi assistant</CardDescription>
+            <div className="min-w-0">
+              <CardTitle className="text-base sm:text-lg lg:text-xl truncate">AI Copilot</CardTitle>
+              <CardDescription className="text-xs sm:text-sm truncate">
+                {walletBalance !== null
+                  ? `Balance: ${walletBalance.toFixed(3)} SOL`
+                  : "Your intelligent DeFi assistant"}
+              </CardDescription>
             </div>
           </div>
-          <Button variant={autopilotMode ? "default" : "outline"} size="sm" onClick={toggleAutopilot} className="gap-2">
-            <Radio className={`h-4 w-4 ${autopilotMode ? "animate-pulse" : ""}`} />
-            {autopilotMode ? "Autopilot ON" : "Autopilot OFF"}
+          <Button
+            variant={autopilotMode ? "default" : "outline"}
+            size="sm"
+            onClick={toggleAutopilot}
+            className="gap-2 flex-shrink-0 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
+          >
+            <Radio className={`h-3 w-3 sm:h-4 sm:w-4 ${autopilotMode ? "animate-pulse" : ""}`} />
+            <span className="hidden xs:inline">{autopilotMode ? "Autopilot ON" : "Autopilot OFF"}</span>
+            <span className="xs:hidden">{autopilotMode ? "ON" : "OFF"}</span>
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4 overflow-hidden p-0">
+
+      <CardContent className="flex flex-1 flex-col gap-2 md:gap-3 lg:gap-4 overflow-hidden p-0">
         {error && (
-          <div className="px-6 pt-4">
+          <div className="px-3 sm:px-4 md:px-6 pt-2 md:pt-3 lg:pt-4 flex-shrink-0">
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
             </Alert>
           </div>
         )}
 
         {autopilotMode && (
-          <div className="px-6 pt-4">
+          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
             <Alert className="border-green-500/50 bg-green-500/10">
               <Radio className="h-4 w-4 animate-pulse text-green-500" />
-              <AlertDescription className="text-sm">
-                <strong>Autopilot Mode Active:</strong> Monitoring your portfolio, prices, and news for opportunities.
+              <AlertDescription className="text-xs sm:text-sm">
+                <strong>Autopilot Mode Active:</strong> Monitoring your portfolio and prices for opportunities.
               </AlertDescription>
             </Alert>
           </div>
         )}
 
-        <ScrollArea className="flex-1 px-4 md:px-6" ref={scrollAreaRef}>
-          <div className="space-y-4 pb-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-              >
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className={message.role === "user" ? "bg-primary text-primary-foreground" : ""}>
-                    {message.role === "user" ? "U" : "AI"}
-                  </AvatarFallback>
-                </Avatar>
+        <ScrollArea className="flex-1 relative">
+          <div className="h-full overflow-hidden">
+            <div className="px-3 sm:px-4 md:px-6 space-y-3 md:space-y-4" ref={scrollViewportRef}>
+              {messages.map((message) => (
                 <div
-                  className={`max-w-[80%] space-y-2 rounded-lg px-4 py-2 ${
-                    message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                  }`}
+                  key={message.id}
+                  className={`flex gap-2 sm:gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
                 >
-                  {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
+                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
+                    <AvatarFallback
+                      className={message.role === "user" ? "bg-primary text-primary-foreground text-xs" : "text-xs"}
+                    >
+                      {message.role === "user" ? "U" : "AI"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div
+                    className={`max-w-[85%] sm:max-w-[80%] space-y-2 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm ${
+                      message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                    }`}
+                  >
+                    {message.content && <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>}
 
-                  {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
+                    {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
 
-            {isLoading && (
-              <div className="flex gap-3">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback>AI</AvatarFallback>
-                </Avatar>
-                <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
+              {isLoading && (
+                <div className="flex gap-2 sm:gap-3">
+                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
+                    <AvatarFallback className="text-xs">AI</AvatarFallback>
+                  </Avatar>
+                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 sm:px-4 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-xs sm:text-sm text-muted-foreground">Thinking...</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              <div className="h-2" />
+            </div>
           </div>
         </ScrollArea>
 
+        {showScrollButton && (
+          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={scrollToBottom}
+              className="w-full gap-2 text-xs sm:text-sm bg-transparent"
+            >
+              <ChevronDown className="h-4 w-4" />
+              Scroll to bottom
+            </Button>
+          </div>
+        )}
+
         {messages.length === 1 && (
-          <div className="px-4 md:px-6">
-            <p className="mb-3 text-sm font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
+            <p className="mb-2 sm:mb-3 text-xs sm:text-sm font-medium text-muted-foreground">Try asking:</p>
+            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 auto-rows-max">
               {EXAMPLE_PROMPTS.map((prompt, index) => (
                 <Button
                   key={index}
                   variant="outline"
                   size="sm"
-                  className="justify-start bg-transparent text-left"
+                  className="justify-start bg-transparent text-left text-xs sm:text-sm h-auto py-2 px-3 whitespace-normal"
                   onClick={() => handleExamplePrompt(prompt)}
                   disabled={isLoading}
                 >
@@ -629,19 +775,25 @@ export function SolanaCopilot() {
           </div>
         )}
 
-        <div className="border-t border-border p-3 md:p-4">
-          <form onSubmit={handleSubmit} className="flex gap-2">
+        <div className="border-t border-dark-border p-2 sm:p-3 md:p-4 flex-shrink-0 bg-dark-bg">
+          <form onSubmit={handleSubmit} className="flex gap-1.5 sm:gap-2">
             <Input
-              placeholder="Ask me to swap, create orders, launch tokens, analyze portfolio..."
+              placeholder="Ask me anything..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={isLoading}
-              className="flex-1 text-sm md:text-base"
+              disabled={isLoading || !publicKey}
+              className="flex-1 text-xs sm:text-sm h-9 sm:h-10"
             />
-            <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
+            <Button
+              type="submit"
+              disabled={isLoading || !input.trim() || !publicKey}
+              size="icon"
+              className="flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10"
+            >
               <Send className="h-4 w-4" />
             </Button>
           </form>
+          {!publicKey && <p className="text-xs text-amber-500 mt-2">Please connect your wallet to use the copilot</p>}
         </div>
       </CardContent>
     </Card>

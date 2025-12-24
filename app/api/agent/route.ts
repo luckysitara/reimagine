@@ -4,9 +4,8 @@ import { prepareMultiSwap } from "@/lib/tools/execute-multi-swap"
 import { analyzePortfolio } from "@/lib/tools/analyze-portfolio"
 import { getTokenPrice } from "@/lib/tools/get-token-price"
 import { analyzeTokenNews } from "@/lib/tools/analyze-token-news"
-import { getJupiterTokenList } from "@/lib/services/jupiter"
-import { createLimitOrder, getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
-import { createDCAOrder, getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
+import { getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
+import { getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
 
 const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. You help users execute blockchain operations and analyze token-related news through natural language.
 
@@ -429,34 +428,69 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
         }
 
         try {
-          const tokens = await getJupiterTokenList()
-          const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
-          const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+          const { findTokenBySymbol } = await import("@/lib/services/jupiter")
+          const { createLimitOrder } = await import("@/lib/services/jupiter-trigger")
 
-          if (!inputTokenData || !outputTokenData) {
+          const inputToken = await findTokenBySymbol(args.inputToken)
+          const outputToken = await findTokenBySymbol(args.outputToken)
+
+          if (!inputToken) {
             return {
               success: false,
-              error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}. Please check the token symbol and try again.`,
+              error: `Token not found: ${args.inputToken}. Please check the symbol (e.g., SOL, USDC, BONK) and try again.`,
             }
           }
 
-          const makingAmount = Math.floor(args.inputAmount * Math.pow(10, inputTokenData.decimals)).toString()
+          if (!outputToken) {
+            return {
+              success: false,
+              error: `Token not found: ${args.outputToken}. Please check the symbol and try again.`,
+            }
+          }
+
+          if (!args.inputAmount || args.inputAmount <= 0) {
+            return {
+              success: false,
+              error: "Input amount must be greater than 0.",
+            }
+          }
+
+          if (!args.targetPrice || args.targetPrice <= 0) {
+            return {
+              success: false,
+              error: "Target price must be greater than 0.",
+            }
+          }
+
+          const makingAmount = Math.floor(args.inputAmount * Math.pow(10, inputToken.decimals)).toString()
           const takingAmount = Math.floor(
-            args.inputAmount * args.targetPrice * Math.pow(10, outputTokenData.decimals),
+            args.inputAmount * args.targetPrice * Math.pow(10, outputToken.decimals),
           ).toString()
 
           const expirationDays = args.expirationDays || 30
           const expiredAt = Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60
 
-          const result = await createLimitOrder({
-            inputMint: inputTokenData.address,
-            outputMint: outputTokenData.address,
+          console.log("[v0] Limit order params:", {
+            inputMint: inputToken.address,
+            outputMint: outputToken.address,
             maker: walletAddress,
             payer: walletAddress,
             makingAmount,
             takingAmount,
             expiredAt,
           })
+
+          const result = await createLimitOrder({
+            inputMint: inputToken.address,
+            outputMint: outputToken.address,
+            maker: walletAddress,
+            payer: walletAddress,
+            makingAmount,
+            takingAmount,
+            expiredAt,
+          })
+
+          console.log("[v0] Limit order result:", result)
 
           return {
             success: true,
@@ -473,7 +507,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           console.error("[v0] Limit order creation error:", error)
           return {
             success: false,
-            error: `Failed to create limit order: ${error?.message || "Unknown error"}`,
+            error: `Failed to create limit order: ${error?.message || "Unknown error"}. Please check your wallet balance and try again.`,
           }
         }
       }
@@ -487,29 +521,77 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
         }
 
         try {
-          const tokens = await getJupiterTokenList()
-          const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.inputToken.toUpperCase())
-          const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === args.outputToken.toUpperCase())
+          const { findTokenBySymbol } = await import("@/lib/services/jupiter")
+          const { createDCAOrder } = await import("@/lib/services/jupiter-recurring")
 
-          if (!inputTokenData || !outputTokenData) {
+          const inputToken = await findTokenBySymbol(args.inputToken)
+          const outputToken = await findTokenBySymbol(args.outputToken)
+
+          if (!inputToken) {
             return {
               success: false,
-              error: `Token not found: ${!inputTokenData ? args.inputToken : args.outputToken}. Please check the token symbol and try again.`,
+              error: `Token not found: ${args.inputToken}. Please check the symbol (e.g., SOL, USDC, BONK) and try again.`,
             }
           }
 
-          const amountInSmallestUnit = Math.floor(args.totalAmount * Math.pow(10, inputTokenData.decimals)).toString()
-          const cycleFrequency = args.frequencyHours * 3600
-          const numberOfOrders = Math.floor(args.totalAmount / args.amountPerCycle)
+          if (!outputToken) {
+            return {
+              success: false,
+              error: `Token not found: ${args.outputToken}. Please check the symbol and try again.`,
+            }
+          }
 
-          const result = await createDCAOrder({
-            inputMint: inputTokenData.address,
-            outputMint: outputTokenData.address,
+          if (!args.totalAmount || args.totalAmount <= 0) {
+            return {
+              success: false,
+              error: "Total amount must be greater than 0.",
+            }
+          }
+
+          if (!args.amountPerCycle || args.amountPerCycle <= 0) {
+            return {
+              success: false,
+              error: "Amount per cycle must be greater than 0.",
+            }
+          }
+
+          if (args.amountPerCycle > args.totalAmount) {
+            return {
+              success: false,
+              error: "Amount per cycle cannot be greater than total amount.",
+            }
+          }
+
+          if (!args.frequencyHours || args.frequencyHours <= 0) {
+            return {
+              success: false,
+              error: "Frequency must be greater than 0 hours.",
+            }
+          }
+
+          const amountInSmallestUnit = Math.floor(args.totalAmount * Math.pow(10, inputToken.decimals)).toString()
+          const cycleFrequency = args.frequencyHours * 3600
+          const numberOfOrders = Math.ceil(args.totalAmount / args.amountPerCycle)
+
+          console.log("[v0] DCA order params:", {
+            inputMint: inputToken.address,
+            outputMint: outputToken.address,
             payer: walletAddress,
             amount: amountInSmallestUnit,
             cycleFrequency,
             numberOfOrders,
           })
+
+          const result = await createDCAOrder({
+            inputMint: inputToken.address,
+            outputMint: outputToken.address,
+            payer: walletAddress,
+            amount: amountInSmallestUnit,
+            cycleFrequency,
+            numberOfOrders,
+          })
+
+          console.log("[v0] DCA order result:", result)
 
           return {
             success: true,
@@ -527,7 +609,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           console.error("[v0] DCA order creation error:", error)
           return {
             success: false,
-            error: `Failed to create DCA order: ${error?.message || "Unknown error"}`,
+            error: `Failed to create DCA order: ${error?.message || "Unknown error"}. Please check your wallet balance and try again.`,
           }
         }
       }
@@ -557,6 +639,35 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
             }
           }
 
+          if (args.name.length < 1 || args.name.length > 100) {
+            return {
+              success: false,
+              error: "Token name must be between 1 and 100 characters.",
+            }
+          }
+
+          if (args.supply <= 0) {
+            return {
+              success: false,
+              error: "Token supply must be greater than 0.",
+            }
+          }
+
+          if (decimals < 0 || decimals > 18) {
+            return {
+              success: false,
+              error: "Decimals must be between 0 and 18.",
+            }
+          }
+
+          console.log("[v0] Creating token with params:", {
+            name: args.name,
+            symbol: args.symbol,
+            decimals,
+            supply: args.supply,
+            walletAddress,
+          })
+
           const response = await fetch("/api/token/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -584,6 +695,11 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
           const data = await response.json()
 
+          console.log("[v0] Token creation response:", {
+            mintAddress: data.mintAddress,
+            hasTransaction: !!data.transaction,
+          })
+
           return {
             success: true,
             type: "token_creation",
@@ -591,6 +707,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
             tokenName: args.name,
             tokenSymbol: args.symbol,
             initialSupply: args.supply,
+            decimals,
             mintAddress: data.mintAddress,
             transaction: data.transaction,
           }
@@ -598,7 +715,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           console.error("[v0] Token creation error:", error)
           return {
             success: false,
-            error: `Failed to create token: ${error?.message || "Unknown error"}. Please ensure you have at least 0.1 SOL for fees.`,
+            error: `Failed to create token: ${error?.message || "Unknown error"}. You need at least 0.1 SOL in your wallet.`,
           }
         }
       }
@@ -690,7 +807,6 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
 
     const errorMessage = error?.message || error?.error || "Unknown error"
 
-    // Map common errors to user-friendly messages
     if (errorMessage.includes("insufficient") || errorMessage.includes("balance")) {
       return {
         success: false,
@@ -728,7 +844,6 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initial
     } catch (error: any) {
       lastError = error
 
-      // Don't retry on non-retriable errors
       if (
         error?.message?.includes("API_KEY_INVALID") ||
         error?.message?.includes("API key not valid") ||
@@ -737,7 +852,6 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initial
         throw error
       }
 
-      // Only retry on rate limit or temporary errors
       const isRateLimitError =
         error?.status === 429 ||
         error?.message?.toLowerCase().includes("rate limit") ||
@@ -748,7 +862,6 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initial
         throw error
       }
 
-      // Calculate exponential backoff delay
       const delay = initialDelay * Math.pow(2, attempt)
       console.log(`[v0] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms delay`)
       await new Promise((resolve) => setTimeout(resolve, delay))
@@ -803,7 +916,6 @@ export async function POST(request: Request) {
         parts: [{ text: msg.content }],
       }))
 
-      // Filter out any consecutive messages with the same role
       const filteredHistory: any[] = []
       for (const msg of history) {
         if (filteredHistory.length === 0 || filteredHistory[filteredHistory.length - 1].role !== msg.role) {
@@ -811,7 +923,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Ensure first message is from user
       if (filteredHistory.length > 0 && filteredHistory[0].role !== "user") {
         filteredHistory.shift()
       }
@@ -824,7 +935,7 @@ export async function POST(request: Request) {
         },
       })
 
-      const lastMessage = messages[messages.length - 1] // Declare lastMessage variable
+      const lastMessage = messages[messages.length - 1]
 
       let result = await retryWithBackoff(() => chat.sendMessage(lastMessage.content))
       let response = result.response
@@ -837,19 +948,16 @@ export async function POST(request: Request) {
 
         console.log(`[v0] Function call detected (iteration ${loopCount}):`, functionCall.name)
 
-        // Send tool call notification to client
         await sendMessage({
           type: "tool_call",
           toolName: functionCall.name,
           args: functionCall.args,
         })
 
-        // Execute the function
         const functionResult = await executeFunctionCall(functionCall, walletAddress)
 
         console.log(`[v0] Function result:`, functionResult)
 
-        // Send tool result to client
         await sendMessage({
           type: "tool_result",
           toolName: functionCall.name,
@@ -872,7 +980,6 @@ export async function POST(request: Request) {
 
       const text = response.text()
 
-      // Send chunks for streaming effect
       const words = text.split(" ")
       for (const word of words) {
         await sendMessage({
@@ -895,7 +1002,6 @@ export async function POST(request: Request) {
 
       let errorMessage = "Failed to process request"
 
-      // Handle API key errors
       if (
         error?.message?.includes("API_KEY_INVALID") ||
         error?.message?.includes("API key not valid") ||
@@ -903,9 +1009,7 @@ export async function POST(request: Request) {
       ) {
         errorMessage =
           "Invalid Google AI API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration. Get a free key at https://ai.google.dev/"
-      }
-      // Handle quota exceeded errors (429 Too Many Requests)
-      else if (
+      } else if (
         error?.status === 429 ||
         error?.code === "RESOURCE_EXHAUSTED" ||
         (error?.message?.toLowerCase().includes("quota") && error?.message?.toLowerCase().includes("exceed")) ||
@@ -913,22 +1017,17 @@ export async function POST(request: Request) {
       ) {
         errorMessage =
           "Google AI API quota exceeded or rate limit hit. Please wait a few minutes and try again. If this persists, consider upgrading your API plan at https://ai.google.dev/pricing"
-      }
-      // Handle rate limit errors (distinct from quota)
-      else if (error?.message?.toLowerCase().includes("rate limit")) {
+      } else if (error?.message?.toLowerCase().includes("rate limit")) {
         errorMessage = "Rate limit exceeded. Please wait a moment before sending another message."
-      }
-      // Handle model unavailable errors
-      else if (error?.message?.toLowerCase().includes("model") && error?.message?.toLowerCase().includes("not found")) {
+      } else if (
+        error?.message?.toLowerCase().includes("model") &&
+        error?.message?.toLowerCase().includes("not found")
+      ) {
         errorMessage =
           "The AI model is temporarily unavailable. Please try again in a moment or check your API key permissions."
-      }
-      // Handle safety/content filtering
-      else if (error?.message?.toLowerCase().includes("safety") || error?.code === "SAFETY") {
+      } else if (error?.message?.toLowerCase().includes("safety") || error?.code === "SAFETY") {
         errorMessage = "Your message was blocked by safety filters. Please rephrase your request."
-      }
-      // Generic error with message
-      else if (error?.message) {
+      } else if (error?.message) {
         errorMessage = `AI request failed: ${error.message}`
       }
 

@@ -36,9 +36,12 @@ export async function createLimitOrder(params: CreateLimitOrderParams): Promise<
     },
   }
 
-  console.log("[v0] Sending limit order request:", requestBody)
+  console.log("[v0] Creating limit order with request:", JSON.stringify(requestBody, null, 2))
 
-  const response = await fetch(`${JUPITER_API_URLS.trigger}/createOrder`, {
+  const url = `${JUPITER_API_URLS.trigger}/createOrder`
+  console.log("[v0] Sending limit order to:", url)
+
+  const response = await fetch(url, {
     method: "POST",
     headers: getJupiterHeaders(),
     body: JSON.stringify(requestBody),
@@ -46,15 +49,26 @@ export async function createLimitOrder(params: CreateLimitOrderParams): Promise<
 
   if (!response.ok) {
     const text = await response.text()
+    console.error("[v0] Limit order API error response:", text)
+
     try {
       const error = JSON.parse(text)
-      throw new Error(`Limit order creation failed: ${response.statusText} - ${JSON.stringify(error)}`)
-    } catch {
-      throw new Error(`Limit order creation failed: ${response.statusText} - ${text}`)
+      if (error.error) {
+        throw new Error(`Limit order creation failed: ${error.error}`)
+      }
+      throw new Error(`Limit order creation failed: ${JSON.stringify(error)}`)
+    } catch (parseError) {
+      if (parseError instanceof SyntaxError) {
+        throw new Error(`Limit order creation failed: ${response.statusText} - ${text}`)
+      }
+      throw parseError
     }
   }
 
-  return await response.json()
+  const result = await response.json()
+  console.log("[v0] Limit order created successfully:", result)
+
+  return result
 }
 
 export async function cancelLimitOrder(orderPubkey: string, maker: string): Promise<{ tx: string }> {
