@@ -44,7 +44,19 @@ export class SecureRPCClient {
    * Get balance for a wallet address
    */
   async getBalance(address: string): Promise<number> {
-    return this.request("getBalance", [address])
+    try {
+      const result = await this.request("getBalance", [address])
+      // Ensure we return a number, not a string or undefined
+      const balance = typeof result === "string" ? Number.parseInt(result, 10) : Number(result)
+      if (Number.isNaN(balance)) {
+        console.warn("[v0] Invalid balance returned:", result, "for address:", address)
+        return 0
+      }
+      return balance
+    } catch (error) {
+      console.error("[v0] Error fetching balance for", address, ":", error)
+      throw error
+    }
   }
 
   /**

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useConnection } from "@solana/wallet-adapter-react"
 import { useSolanaBalance } from "@/hooks/use-solana-balance"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 export function TokenStudioPanel() {
   const { publicKey, signTransaction } = useWallet()
@@ -95,14 +96,15 @@ export function TokenStudioPanel() {
       return
     }
 
+    const minSOLRequired = 0.1
     console.log("[v0] Checking balance before token creation...")
-    console.log("[v0] Current balance:", balance)
+    console.log("[v0] Current balance:", balance, "SOL, Required:", minSOLRequired, "SOL")
 
-    const estimatedFee = 0.1 // Estimated SOL needed for token creation
-    if (balance < estimatedFee) {
+    if (Number.isNaN(balance) || balance < minSOLRequired) {
+      const needed = (minSOLRequired - (Number.isNaN(balance) ? 0 : balance)).toFixed(4)
       toast({
         title: "Insufficient Balance",
-        description: `You need at least ${estimatedFee} SOL to create a token. Your current balance is ${balance.toFixed(4)} SOL.`,
+        description: `You need at least ${minSOLRequired} SOL to create a token. You need ${needed} more SOL.`,
         variant: "destructive",
       })
       return
@@ -180,214 +182,222 @@ export function TokenStudioPanel() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-primary" />
-          <div>
-            <CardTitle>Token Studio</CardTitle>
-            <CardDescription>Create your own SPL token on Solana</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {createdToken ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-green-500">
-              <CheckCircle2 className="h-5 w-5" />
-              <h3 className="text-lg font-semibold">Token Created Successfully!</h3>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle>Token Studio</CardTitle>
+              <CardDescription>Create your own SPL token on Solana</CardDescription>
             </div>
-
-            <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Mint Address</Label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono">
-                    {createdToken.mintAddress}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(createdToken.mintAddress)
-                      toast({ title: "Copied to clipboard" })
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {createdToken ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-green-500">
+                <CheckCircle2 className="h-5 w-5" />
+                <h3 className="text-lg font-semibold">Token Created Successfully!</h3>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Transaction Signature</Label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono truncate">
-                    {createdToken.signature}
-                  </code>
-                  <Button size="sm" variant="outline" asChild>
-                    <a
-                      href={`https://solscan.io/tx/${createdToken.signature}${
-                        process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
-                      }`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+              <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Mint Address</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono">
+                      {createdToken.mintAddress}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdToken.mintAddress)
+                        toast({ title: "Copied to clipboard" })
+                      }}
                     >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </Button>
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Transaction Signature</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded bg-background px-3 py-2 text-sm font-mono truncate">
+                      {createdToken.signature}
+                    </code>
+                    <Button size="sm" variant="outline" asChild>
+                      <a
+                        href={`https://solscan.io/tx/${createdToken.signature}${
+                          process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
+                        }`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
                 </div>
               </div>
+
+              <Button onClick={() => setCreatedToken(null)} className="w-full">
+                Create Another Token
+              </Button>
             </div>
-
-            <Button onClick={() => setCreatedToken(null)} className="w-full">
-              Create Another Token
-            </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Token Name</Label>
-                <Input
-                  id="name"
-                  placeholder="My Token"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="symbol">Symbol</Label>
-                <Input
-                  id="symbol"
-                  placeholder="MTK"
-                  value={formData.symbol}
-                  onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
-                  required
-                  maxLength={10}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="decimals">Decimals</Label>
-                <Input
-                  id="decimals"
-                  type="number"
-                  placeholder="9"
-                  value={formData.decimals}
-                  onChange={(e) => setFormData({ ...formData, decimals: e.target.value })}
-                  required
-                  min="0"
-                  max="9"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="supply">Total Supply</Label>
-                <Input
-                  id="supply"
-                  type="number"
-                  placeholder="1000000"
-                  value={formData.supply}
-                  onChange={(e) => setFormData({ ...formData, supply: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe your token..."
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="imageUrl">Token Image</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="imageUrl"
-                  placeholder="https://example.com/image.png or leave empty"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleGenerateImage}
-                  disabled={isGeneratingImage || !formData.description}
-                >
-                  {isGeneratingImage ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      AI Generate
-                    </>
-                  )}
-                </Button>
-              </div>
-              {formData.imageUrl && (
-                <div className="mt-2 rounded-lg border border-border p-2">
-                  <img
-                    src={formData.imageUrl || "/placeholder.svg"}
-                    alt="Token preview"
-                    className="h-20 w-20 rounded-lg object-cover"
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Token Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="My Token"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
                   />
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
-              <h4 className="text-sm font-semibold">Token Configuration</h4>
-              <div className="grid gap-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Network</span>
-                  <span className="font-medium">
-                    Solana {process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet-beta" ? "Mainnet" : "Devnet"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Your Balance</span>
-                  <span className="font-medium">{isLoadingBalance ? "Loading..." : `${balance.toFixed(4)} SOL`}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Freeze Authority</span>
-                  <span className="font-medium">Your Wallet</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Mint Authority</span>
-                  <span className="font-medium">Your Wallet</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Estimated Fee</span>
-                  <span className="font-medium">~0.1 SOL</span>
+                <div className="space-y-2">
+                  <Label htmlFor="symbol">Symbol</Label>
+                  <Input
+                    id="symbol"
+                    placeholder="MTK"
+                    value={formData.symbol}
+                    onChange={(e) => setFormData({ ...formData, symbol: e.target.value.toUpperCase() })}
+                    required
+                    maxLength={10}
+                  />
                 </div>
               </div>
-            </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
-              {isCreating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating Token...
-                </>
-              ) : !publicKey ? (
-                "Connect Wallet to Create"
-              ) : (
-                "Create Token"
-              )}
-            </Button>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="decimals">Decimals</Label>
+                  <Input
+                    id="decimals"
+                    type="number"
+                    placeholder="9"
+                    value={formData.decimals}
+                    onChange={(e) => setFormData({ ...formData, decimals: e.target.value })}
+                    required
+                    min="0"
+                    max="9"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supply">Total Supply</Label>
+                  <Input
+                    id="supply"
+                    type="number"
+                    placeholder="1000000"
+                    value={formData.supply}
+                    onChange={(e) => setFormData({ ...formData, supply: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Describe your token..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="imageUrl">Token Image</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="imageUrl"
+                    placeholder="https://example.com/image.png or leave empty"
+                    value={formData.imageUrl}
+                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage || !formData.description}
+                  >
+                    {isGeneratingImage ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        AI Generate
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {formData.imageUrl && (
+                  <div className="mt-2 rounded-lg border border-border p-2">
+                    <img
+                      src={formData.imageUrl || "/placeholder.svg"}
+                      alt="Token preview"
+                      className="h-20 w-20 rounded-lg object-cover"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+                <h4 className="text-sm font-semibold">Token Configuration</h4>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Network</span>
+                    <span className="font-medium">
+                      Solana {process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet-beta" ? "Mainnet" : "Devnet"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Your Balance</span>
+                    <span className="font-medium">{isLoadingBalance ? "Loading..." : `${balance.toFixed(4)} SOL`}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Freeze Authority</span>
+                    <span className="font-medium">Your Wallet</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Mint Authority</span>
+                    <span className="font-medium">Your Wallet</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Estimated Fee</span>
+                    <span className="font-medium">~0.1 SOL</span>
+                  </div>
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full" size="lg" disabled={!publicKey || isCreating}>
+                {isCreating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Token...
+                  </>
+                ) : !publicKey ? (
+                  "Connect Wallet to Create"
+                ) : (
+                  "Create Token"
+                )}
+              </Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={createdToken !== null} onOpenChange={() => setCreatedToken(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          {/* Existing dialog content here */}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

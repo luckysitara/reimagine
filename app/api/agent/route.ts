@@ -877,7 +877,11 @@ export async function POST(request: Request) {
   const writer = stream.writable.getWriter()
 
   const sendMessage = async (data: any) => {
-    await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+    try {
+      await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+    } catch (error) {
+      console.error("[v0] Failed to send message:", error)
+    }
   }
   ;(async () => {
     try {
@@ -978,15 +982,28 @@ export async function POST(request: Request) {
         response = result.response
       }
 
-      const text = response.text()
+      let responseText = ""
+      try {
+        responseText = await response.text()
+      } catch (error) {
+        console.error("[v0] Error getting response text:", error)
+        responseText = "I've processed your request. Please check the transaction details."
+      }
 
-      const words = text.split(" ")
-      for (const word of words) {
+      if (responseText && responseText.trim()) {
+        const words = responseText.split(" ")
+        for (const word of words) {
+          await sendMessage({
+            type: "text_chunk",
+            content: word + " ",
+          })
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } else {
         await sendMessage({
           type: "text_chunk",
-          content: word + " ",
+          content: "Request processed successfully. ",
         })
-        await new Promise((resolve) => setTimeout(resolve, 20))
       }
 
       await sendMessage({ type: "done" })

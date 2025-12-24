@@ -3,15 +3,13 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Sparkles, Loader2, AlertCircle, Radio, CheckCircle, ChevronDown } from "lucide-react"
+import { Send, Sparkles, Loader2, AlertCircle, CheckCircle } from "lucide-react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { VersionedTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { secureRPCClient } from "@/lib/utils/rpc-client"
 
@@ -109,11 +107,17 @@ export function SolanaCopilot() {
 
     const fetchBalance = async () => {
       try {
-        const balance = await secureRPCClient.getBalance(publicKey.toBase58())
-        setWalletBalance(balance / LAMPORTS_PER_SOL)
-        console.log("[v0] Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL")
+        if (!publicKey) {
+          setWalletBalance(0)
+          return
+        }
+        const balanceLamports = await secureRPCClient.getBalance(publicKey.toBase58())
+        const balanceSOL = Number(balanceLamports) / LAMPORTS_PER_SOL
+        console.log("[v0] Fetched wallet balance:", balanceSOL, "SOL from", balanceLamports, "lamports")
+        setWalletBalance(Number.isNaN(balanceSOL) ? 0 : balanceSOL)
       } catch (error) {
         console.error("[v0] Failed to fetch balance:", error)
+        setWalletBalance(0)
       }
     }
 
@@ -316,6 +320,9 @@ export function SolanaCopilot() {
 
     while (retryCount <= maxRetries) {
       try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 60000) // 60 second timeout
+
         const response = await fetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -323,7 +330,10 @@ export function SolanaCopilot() {
             messages: [...messages, userMessage],
             walletAddress: publicKey?.toBase58(),
           }),
+          signal: controller.signal,
         })
+
+        clearTimeout(timeout)
 
         if (!response.ok) {
           if (response.status === 429 && retryCount < maxRetries) {
@@ -334,8 +344,12 @@ export function SolanaCopilot() {
             continue
           }
 
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to get response")
+          try {
+            const errorData = await response.json()
+            throw new Error(errorData.error || `Server error: ${response.status}`)
+          } catch {
+            throw new Error(`Failed to get response: ${response.status}`)
+          }
         }
 
         const reader = response.body?.getReader()
@@ -346,85 +360,114 @@ export function SolanaCopilot() {
         }
 
         let buffer = ""
+        let hasReceivedData = false
 
         while (true) {
-          const { done, value } = await reader.read()
+          try {
+            const { done, value } = await reader.read()
 
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split("\n\n")
-          buffer = lines.pop() || ""
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6))
-
-              if (data.error) {
-                setError(data.error)
-                break
+            if (done) {
+              if (!hasReceivedData) {
+                setError("No response from AI assistant")
               }
+              break
+            }
 
-              if (data.type === "text_chunk") {
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last.role === "assistant") {
-                    last.content += data.content
+            hasReceivedData = true
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split("\n\n")
+            buffer = lines.pop() || ""
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6))
+
+                  if (data.error) {
+                    setError(data.error)
+                    console.error("[v0] Error from stream:", data.error)
+                    break
                   }
-                  return updated
-                })
-              } else if (data.type === "tool_call") {
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last.role === "assistant") {
-                    last.toolCalls = last.toolCalls || []
-                    last.toolCalls.push({
-                      toolName: data.toolName,
-                      args: data.args,
+
+                  if (data.type === "text_chunk") {
+                    setMessages((prev) => {
+                      const updated = [...prev]
+                      const last = updated[updated.length - 1]
+                      if (last && last.role === "assistant") {
+                        last.content += data.content
+                      }
+                      return updated
                     })
+                  } else if (data.type === "tool_call") {
+                    console.log("[v0] Tool call detected:", data.toolName)
+                    setMessages((prev) => {
+                      const updated = [...prev]
+                      const last = updated[updated.length - 1]
+                      if (last && last.role === "assistant") {
+                        last.toolCalls = last.toolCalls || []
+                        last.toolCalls.push({
+                          toolName: data.toolName,
+                          args: data.args,
+                        })
+                      }
+                      return updated
+                    })
+                  } else if (data.type === "tool_result") {
+                    setMessages((prev) => {
+                      const updated = [...prev]
+                      const last = updated[updated.length - 1]
+                      if (last && last.role === "assistant" && last.toolCalls) {
+                        const tool = last.toolCalls.find((t) => t.toolName === data.toolName)
+                        if (tool) {
+                          tool.result = data.result
+                        }
+                      }
+                      return updated
+                    })
+                  } else if (data.type === "done") {
+                    console.log("[v0] Response complete")
                   }
-                  return updated
-                })
-              } else if (data.type === "tool_result") {
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last.role === "assistant" && last.toolCalls) {
-                    const tool = last.toolCalls.find((t) => t.toolName === data.toolName)
-                    if (tool) {
-                      tool.result = data.result
-                    }
-                  }
-                  return updated
-                })
-              } else if (data.type === "done") {
-                break
+                } catch (parseError) {
+                  console.error("[v0] Failed to parse stream data:", parseError)
+                }
               }
             }
+          } catch (readError) {
+            if (readError instanceof Error && readError.name === "AbortError") {
+              throw new Error("Request timeout. Please try again.")
+            }
+            throw readError
           }
         }
 
-        break
-      } catch (err: any) {
-        console.error(`[v0] Copilot error (attempt ${retryCount + 1}/${maxRetries + 1}):`, err)
-
-        if (retryCount < maxRetries && !err.message?.toLowerCase().includes("api")) {
-          const retryDelay = 2000 * Math.pow(2, retryCount)
-          console.log(`[v0] Retrying in ${retryDelay}ms...`)
-          await new Promise((resolve) => setTimeout(resolve, retryDelay))
-          retryCount++
-          continue
+        if (hasReceivedData) {
+          break // Success, exit retry loop
         }
+      } catch (error) {
+        console.error("[v0] Request error:", error)
 
-        setError(err.message || "An error occurred")
-        setMessages((prev) => prev.filter((m) => m.content || m.toolCalls?.length))
-        break
+        if (error instanceof Error) {
+          if (error.message.includes("AbortError") || error.message.includes("timeout")) {
+            setError("Request timeout. The AI is taking too long to respond. Please try again.")
+          } else if (error.message.includes("rate limit")) {
+            setError("Rate limited. Please wait a moment before sending another message.")
+          } else if (error.message.includes("No response stream")) {
+            if (retryCount < maxRetries) {
+              const delay = 1000 * Math.pow(2, retryCount)
+              console.log(`[v0] Retrying in ${delay}ms...`)
+              await new Promise((resolve) => setTimeout(resolve, delay))
+              retryCount++
+              continue
+            }
+            setError("Failed to connect to AI service. Please try again.")
+          } else {
+            setError(error.message || "Failed to get response from AI")
+          }
+        } else {
+          setError("An unexpected error occurred")
+        }
       } finally {
-        if (retryCount > maxRetries) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
     }
 
@@ -698,155 +741,106 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex flex-col h-full w-full bg-dark-surface border-dark-border">
-      <CardHeader className="pb-2 md:pb-3 lg:pb-4 flex-shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent flex-shrink-0">
-              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
-            </div>
-            <div className="min-w-0">
-              <CardTitle className="text-base sm:text-lg lg:text-xl truncate">AI Copilot</CardTitle>
-              <CardDescription className="text-xs sm:text-sm truncate">
-                {walletBalance !== null
-                  ? `Balance: ${walletBalance.toFixed(3)} SOL`
-                  : "Your intelligent DeFi assistant"}
-              </CardDescription>
-            </div>
+    <Card className="flex flex-col h-screen md:h-[600px] rounded-lg border border-border bg-background overflow-hidden">
+      <CardHeader className="flex-shrink-0 border-b border-border">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-lg md:text-xl">AI Copilot</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Your intelligent DeFi assistant</CardDescription>
           </div>
-          <Button
-            variant={autopilotMode ? "default" : "outline"}
-            size="sm"
-            onClick={toggleAutopilot}
-            className="gap-2 flex-shrink-0 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
-          >
-            <Radio className={`h-3 w-3 sm:h-4 sm:w-4 ${autopilotMode ? "animate-pulse" : ""}`} />
-            <span className="hidden xs:inline">{autopilotMode ? "Autopilot ON" : "Autopilot OFF"}</span>
-            <span className="xs:hidden">{autopilotMode ? "ON" : "OFF"}</span>
-          </Button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {walletBalance !== null && (
+              <div className="flex flex-col items-end">
+                <span className="text-xs md:text-sm font-semibold text-foreground">
+                  {Number.isNaN(walletBalance) ? "0.0000" : walletBalance.toFixed(4)}
+                </span>
+                <span className="text-xs text-muted-foreground">SOL</span>
+              </div>
+            )}
+            <div className={`h-2 w-2 rounded-full ${publicKey ? "bg-green-500" : "bg-red-500"}`} />
+          </div>
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-2 md:gap-3 lg:gap-4 overflow-hidden p-0">
-        {error && (
-          <div className="px-3 sm:px-4 md:px-6 pt-2 md:pt-3 lg:pt-4 flex-shrink-0">
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-        {autopilotMode && (
-          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
-            <Alert className="border-green-500/50 bg-green-500/10">
-              <Radio className="h-4 w-4 animate-pulse text-green-500" />
-              <AlertDescription className="text-xs sm:text-sm">
-                <strong>Autopilot Mode Active:</strong> Monitoring your portfolio and prices for opportunities.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-        <ScrollArea className="flex-1 relative">
-          <div className="h-full overflow-hidden">
-            <div className="px-3 sm:px-4 md:px-6 space-y-3 md:space-y-4" ref={scrollViewportRef}>
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-2 sm:gap-3 ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-                >
-                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
-                    <AvatarFallback
-                      className={message.role === "user" ? "bg-primary text-primary-foreground text-xs" : "text-xs"}
-                    >
-                      {message.role === "user" ? "U" : "AI"}
-                    </AvatarFallback>
-                  </Avatar>
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <ScrollArea className="flex-1 w-full px-3 md:px-4 py-3 md:py-4">
+          <div className="space-y-3 md:space-y-4 pr-4">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-8 md:py-12">
+                <div className="mb-4">
+                  <div className="h-12 w-12 md:h-16 md:w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                    <Sparkles className="h-6 w-6 md:h-8 md:w-8 text-primary" />
+                  </div>
+                </div>
+                <p className="text-sm md:text-base font-semibold text-foreground">Start Trading</p>
+                <p className="text-xs md:text-sm text-muted-foreground mt-2 px-4">
+                  Ask me to swap tokens, create orders, or analyze your portfolio
+                </p>
+              </div>
+            ) : (
+              messages.map((message) => (
+                <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[85%] sm:max-w-[80%] space-y-2 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm ${
-                      message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                    className={`max-w-xs md:max-w-md lg:max-w-lg px-3 md:px-4 py-2 md:py-3 rounded-lg text-xs md:text-sm ${
+                      message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                     }`}
                   >
-                    {message.content && <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>}
-
-                    {message.toolCalls?.map((toolCall, idx) => renderToolResult(toolCall, idx))}
+                    <p className="break-words">{message.content}</p>
+                    {message.toolCalls && message.toolCalls.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {message.toolCalls.map((tool, idx) => (
+                          <div key={idx} className="border-l-2 border-current pl-2 text-xs opacity-75">
+                            <p className="font-semibold">{tool.toolName}</p>
+                            {tool.result && (
+                              <p className="mt-1 text-xs">
+                                {typeof tool.result === "string"
+                                  ? tool.result
+                                  : tool.result.error || JSON.stringify(tool.result).slice(0, 100)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex gap-2 sm:gap-3">
-                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
-                    <AvatarFallback className="text-xs">AI</AvatarFallback>
-                  </Avatar>
-                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 sm:px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-xs sm:text-sm text-muted-foreground">Thinking...</span>
+              ))
+            )}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-lg px-3 md:px-4 py-2 md:py-3">
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" />
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-100" />
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce delay-200" />
                   </div>
                 </div>
-              )}
-
-              <div className="h-2" />
-            </div>
+              </div>
+            )}
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 md:px-4 py-2 md:py-3 text-destructive text-xs md:text-sm">
+                <p className="font-semibold">Error</p>
+                <p className="mt-1 text-xs md:text-sm">{error}</p>
+              </div>
+            )}
           </div>
         </ScrollArea>
+      </div>
 
-        {showScrollButton && (
-          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={scrollToBottom}
-              className="w-full gap-2 text-xs sm:text-sm bg-transparent"
-            >
-              <ChevronDown className="h-4 w-4" />
-              Scroll to bottom
-            </Button>
-          </div>
-        )}
-
-        {messages.length === 1 && (
-          <div className="px-3 sm:px-4 md:px-6 flex-shrink-0">
-            <p className="mb-2 sm:mb-3 text-xs sm:text-sm font-medium text-muted-foreground">Try asking:</p>
-            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 auto-rows-max">
-              {EXAMPLE_PROMPTS.map((prompt, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  className="justify-start bg-transparent text-left text-xs sm:text-sm h-auto py-2 px-3 whitespace-normal"
-                  onClick={() => handleExamplePrompt(prompt)}
-                  disabled={isLoading}
-                >
-                  {prompt}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="border-t border-dark-border p-2 sm:p-3 md:p-4 flex-shrink-0 bg-dark-bg">
-          <form onSubmit={handleSubmit} className="flex gap-1.5 sm:gap-2">
-            <Input
-              placeholder="Ask me anything..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isLoading || !publicKey}
-              className="flex-1 text-xs sm:text-sm h-9 sm:h-10"
-            />
-            <Button
-              type="submit"
-              disabled={isLoading || !input.trim() || !publicKey}
-              size="icon"
-              className="flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-          {!publicKey && <p className="text-xs text-amber-500 mt-2">Please connect your wallet to use the copilot</p>}
-        </div>
-      </CardContent>
+      <CardFooter className="flex-shrink-0 border-t border-border p-3 md:p-4">
+        <form onSubmit={handleSubmit} className="w-full flex gap-2">
+          <Input
+            placeholder="Ask me anything..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={isLoading || !publicKey}
+            className="text-sm md:text-base flex-1 min-w-0"
+          />
+          <Button type="submit" size="sm" disabled={isLoading || !publicKey || !input.trim()} className="flex-shrink-0">
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      </CardFooter>
     </Card>
   )
 }

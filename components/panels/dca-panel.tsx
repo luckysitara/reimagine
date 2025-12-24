@@ -318,7 +318,7 @@ export function DCAPanel() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {isLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -373,14 +373,12 @@ export function DCAPanel() {
       </Card>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create DCA Order</DialogTitle>
-            <DialogDescription>
-              Automate recurring purchases to dollar-cost average into your chosen token over time
-            </DialogDescription>
+            <DialogDescription>Set up recurring token purchases</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
             <div className="space-y-2">
               <Label>From Token</Label>
               <Button

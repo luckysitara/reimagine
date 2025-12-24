@@ -298,7 +298,7 @@ export function LimitOrdersPanel() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {isLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -347,14 +347,12 @@ export function LimitOrdersPanel() {
       </Card>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Limit Order</DialogTitle>
-            <DialogDescription>
-              Set a price target to automatically execute your trade when the market reaches your desired rate
-            </DialogDescription>
+            <DialogDescription>Set a price target for automatic execution</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-150px)]">
             <div className="space-y-2">
               <Label>Order Type</Label>
               <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
