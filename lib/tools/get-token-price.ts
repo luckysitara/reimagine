@@ -1,4 +1,4 @@
-import { getJupiterTokenList, getJupiterQuote } from "../services/jupiter"
+import { findTokenBySymbol, getJupiterQuote } from "../services/jupiter"
 
 export interface TokenPrice {
   symbol: string
@@ -7,13 +7,10 @@ export interface TokenPrice {
 }
 
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-const SOL_MINT = "So11111111111111111111111111111111111111112"
 
 export async function getTokenPrice(tokenSymbol: string): Promise<TokenPrice> {
   try {
-    const tokens = await getJupiterTokenList()
-
-    const token = tokens.find((t) => t.symbol.toUpperCase() === tokenSymbol.toUpperCase())
+    const token = await findTokenBySymbol(tokenSymbol)
 
     if (!token) {
       throw new Error(`Token ${tokenSymbol} not found`)
@@ -44,11 +41,12 @@ export async function getTokenPrice(tokenSymbol: string): Promise<TokenPrice> {
   } catch (error) {
     console.error("[v0] Error fetching token price:", error)
 
-    // Fallback hardcoded prices for common tokens
     const fallbackPrices: Record<string, number> = {
       SOL: 100,
       USDC: 1.0,
       USDT: 1.0,
+      BONK: 0.00003,
+      JUP: 0.5,
     }
 
     if (fallbackPrices[tokenSymbol.toUpperCase()]) {

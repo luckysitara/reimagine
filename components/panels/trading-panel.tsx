@@ -46,6 +46,7 @@ export function TradingPanel() {
   const { balance } = useSolanaBalance()
 
   const [tokens, setTokens] = useState<JupiterToken[]>([])
+  const [walletTokens, setWalletTokens] = useState<JupiterToken[]>([])
   const [inputToken, setInputToken] = useState<JupiterToken>(DEFAULT_SOL)
   const [outputToken, setOutputToken] = useState<JupiterToken>(DEFAULT_USDC)
   const [inputAmount, setInputAmount] = useState("")
@@ -59,12 +60,52 @@ export function TradingPanel() {
 
   useEffect(() => {
     getJupiterTokenList()
-      .then(setTokens)
+      .then((allTokens) => {
+        setTokens(allTokens)
+        setWalletTokens([DEFAULT_SOL])
+      })
       .catch((err) => {
         console.error("[v0] Failed to load tokens:", err)
         toast.error("Failed to load token list")
       })
   }, [])
+
+  useEffect(() => {
+    const fetchWalletTokens = async () => {
+      if (!publicKey) {
+        setWalletTokens([DEFAULT_SOL])
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/portfolio?wallet=${publicKey.toBase58()}`)
+        if (!response.ok) {
+          console.error("[v0] Failed to fetch wallet tokens")
+          setWalletTokens([DEFAULT_SOL])
+          return
+        }
+
+        const data = await response.json()
+        const walletTokensList: JupiterToken[] = [
+          DEFAULT_SOL,
+          ...(data.tokens || []).map((token: any) => ({
+            address: token.mint,
+            symbol: token.symbol || "UNKNOWN",
+            name: token.name || "Unknown Token",
+            decimals: token.decimals || 6,
+            logoURI: token.logoURI,
+          })),
+        ]
+
+        setWalletTokens(walletTokensList)
+      } catch (error) {
+        console.error("[v0] Error fetching wallet tokens:", error)
+        setWalletTokens([DEFAULT_SOL])
+      }
+    }
+
+    fetchWalletTokens()
+  }, [publicKey])
 
   useEffect(() => {
     if (!inputAmount || Number.parseFloat(inputAmount) <= 0) {
@@ -353,8 +394,9 @@ export function TradingPanel() {
         open={showInputTokenDialog}
         onOpenChange={setShowInputTokenDialog}
         onSelectToken={setInputToken}
-        tokens={tokens}
+        tokens={walletTokens}
         excludeToken={outputToken.address}
+        title="Select Token to Pay"
       />
 
       <TokenSearchDialog
@@ -363,6 +405,7 @@ export function TradingPanel() {
         onSelectToken={setOutputToken}
         tokens={tokens}
         excludeToken={inputToken.address}
+        title="Select Token to Receive"
       />
     </>
   )

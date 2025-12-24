@@ -84,7 +84,7 @@ export async function getJupiterTokenList(): Promise<JupiterToken[]> {
   }
 }
 
-export async function findTokenBySymbol(symbol: string): Promise<JupiterToken | null> {
+export async function findTokenBySymbol(symbol: string, ignoreCache = false): Promise<JupiterToken | null> {
   try {
     const tokens = await getJupiterTokenList()
 
@@ -95,30 +95,69 @@ export async function findTokenBySymbol(symbol: string): Promise<JupiterToken | 
 
     const upperSymbol = symbol.toUpperCase().trim()
 
-    // 1. Exact symbol match
+    // 1. Exact symbol match (case-insensitive)
     let token = tokens.find(
       (t) => t.symbol.toUpperCase() === upperSymbol || t.address.toLowerCase() === symbol.toLowerCase(),
     )
     if (token) {
-      console.log("[v0] Found token by exact match:", token.symbol)
+      console.log("[v0] Found token by exact match:", token.symbol, token.address)
       return token
     }
 
-    // 2. Partial match
+    // 2. Check common token mints directly (for tokens that might not be in the full list)
+    const commonTokenMints: Record<string, JupiterToken> = {
+      SOL: {
+        address: "So11111111111111111111111111111111111111112",
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+      },
+      USDC: {
+        address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        symbol: "USDC",
+        name: "USD Coin",
+        decimals: 6,
+      },
+      USDT: {
+        address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenEsw",
+        symbol: "USDT",
+        name: "Tether USD",
+        decimals: 6,
+      },
+      BONK: {
+        address: "DezXAZ8z7PnrnRJjoBRwWQVzEjVAn81VolNAH3vtN2g",
+        symbol: "BONK",
+        name: "Bonk",
+        decimals: 5,
+      },
+      JUP: {
+        address: "JUPyiwrYJFskUPiHa7hKeAlrjUzNcfCP5AJbNbLAXUc",
+        symbol: "JUP",
+        name: "Jupiter",
+        decimals: 6,
+      },
+    }
+
+    if (commonTokenMints[upperSymbol]) {
+      console.log("[v0] Found token from common mints cache:", upperSymbol)
+      return commonTokenMints[upperSymbol]
+    }
+
+    // 3. Partial match
     token = tokens.find((t) => t.symbol.toUpperCase().includes(upperSymbol))
     if (token) {
       console.log("[v0] Found token by partial match:", token.symbol)
       return token
     }
 
-    // 3. Name match
+    // 4. Name match
     token = tokens.find((t) => t.name.toUpperCase().includes(upperSymbol))
     if (token) {
       console.log("[v0] Found token by name match:", token.symbol)
       return token
     }
 
-    console.warn("[v0] Token not found:", symbol)
+    console.warn("[v0] Token not found:", symbol, "checked", tokens.length, "tokens")
     return null
   } catch (error) {
     console.error("[v0] Token lookup error:", error)
@@ -187,6 +226,13 @@ export async function getJupiterQuote(
       throw new Error("Amount must be greater than 0")
     }
 
+    if (!inputMint || inputMint.length < 30) {
+      throw new Error("Invalid input token mint address")
+    }
+    if (!outputMint || outputMint.length < 30) {
+      throw new Error("Invalid output token mint address")
+    }
+
     const params = new URLSearchParams({
       inputMint,
       outputMint,
@@ -198,9 +244,10 @@ export async function getJupiterQuote(
     const url = `/api/jupiter/order?${params.toString()}`
 
     console.log("[v0] Fetching Jupiter quote:", {
-      inputMint: inputMint.slice(0, 8),
-      outputMint: outputMint.slice(0, 8),
+      inputMint,
+      outputMint,
       amount,
+      amountDecimals: amount.toString().length,
     })
 
     const controller = new AbortController()

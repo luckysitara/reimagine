@@ -1,5 +1,5 @@
 import { getJupiterQuote } from "../services/jupiter"
-import { getJupiterTokenList } from "../services/jupiter"
+import { findTokenBySymbol } from "../services/jupiter"
 
 export interface SwapParams {
   inputToken: string
@@ -33,15 +33,15 @@ export async function prepareSwap(params: SwapParams): Promise<SwapPreparation> 
     throw new Error("Amount must be greater than 0")
   }
 
-  // Get token list
-  const tokens = await getJupiterTokenList()
+  const inputTokenData = await findTokenBySymbol(inputToken)
+  const outputTokenData = await findTokenBySymbol(outputToken)
 
-  // Find token mints by symbol
-  const inputTokenData = tokens.find((t) => t.symbol.toUpperCase() === inputToken.toUpperCase())
-  const outputTokenData = tokens.find((t) => t.symbol.toUpperCase() === outputToken.toUpperCase())
+  if (!inputTokenData) {
+    throw new Error(`Token not found: ${inputToken}. Please check the symbol (e.g., SOL, USDC, BONK) and try again.`)
+  }
 
-  if (!inputTokenData || !outputTokenData) {
-    throw new Error(`Token not found: ${!inputTokenData ? inputToken : outputToken}`)
+  if (!outputTokenData) {
+    throw new Error(`Token not found: ${outputToken}. Please check the symbol (e.g., SOL, USDC, BONK) and try again.`)
   }
 
   if (inputTokenData.address === outputTokenData.address) {

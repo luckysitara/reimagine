@@ -14,9 +14,17 @@ interface TokenSearchDialogProps {
   onSelectToken: (token: JupiterToken) => void
   tokens: JupiterToken[]
   excludeToken?: string
+  title?: string
 }
 
-export function TokenSearchDialog({ open, onOpenChange, onSelectToken, tokens, excludeToken }: TokenSearchDialogProps) {
+export function TokenSearchDialog({
+  open,
+  onOpenChange,
+  onSelectToken,
+  tokens,
+  excludeToken,
+  title = "Select Token",
+}: TokenSearchDialogProps) {
   const [search, setSearch] = useState("")
   const [filteredTokens, setFilteredTokens] = useState<JupiterToken[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -33,8 +41,7 @@ export function TokenSearchDialog({ open, onOpenChange, onSelectToken, tokens, e
       const searchLower = search.toLowerCase().trim()
 
       if (searchLower === "") {
-        // Show popular tokens first if no search
-        setFilteredTokens(tokens.slice(0, 30))
+        setFilteredTokens(tokens.slice(0, 100))
         setIsSearching(false)
         return
       }
@@ -68,7 +75,7 @@ export function TokenSearchDialog({ open, onOpenChange, onSelectToken, tokens, e
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Select Token</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 flex-1 min-h-0">
           <div className="relative">
@@ -109,7 +116,7 @@ export function TokenSearchDialog({ open, onOpenChange, onSelectToken, tokens, e
                   ))
                 : !isSearching && (
                     <div className="py-8 text-center text-sm text-muted-foreground">
-                      {search ? "No tokens found" : "Start typing to search tokens"}
+                      {search ? "No tokens found" : "No tokens available"}
                     </div>
                   )}
             </div>

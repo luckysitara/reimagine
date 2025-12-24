@@ -140,7 +140,12 @@ export function LimitOrdersPanel() {
         Number.parseFloat(targetPrice) * inAmount * Math.pow(10, outputToken.decimals - inputToken.decimals),
       )
 
-      console.log("[v0] Calculated amounts:", { inAmount, outAmount })
+      console.log("[v0] Calculated amounts:", {
+        inAmount,
+        outAmount,
+        inputMint: inputToken.address,
+        outputMint: outputToken.address,
+      })
 
       const response = await fetch("/api/jupiter/limit-orders", {
         method: "POST",
@@ -227,6 +232,8 @@ export function LimitOrdersPanel() {
       if (error instanceof Error) {
         if (error.message.includes("User rejected") || error.message.includes("cancelled")) {
           toast.error("Transaction cancelled by user")
+        } else if (error.message.includes("Token not found")) {
+          toast.error("One or both tokens not found. Please verify token symbols and try again.")
         } else {
           toast.error(error.message)
         }
