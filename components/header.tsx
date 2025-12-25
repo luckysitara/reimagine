@@ -16,6 +16,7 @@ import {
 import { useSolanaBalance } from "@/hooks/use-solana-balance"
 import { formatAddress, formatSOL, formatUSD } from "@/lib/utils/format"
 import { useState } from "react"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 
 interface HeaderProps {
   sidebarCollapsed: boolean
@@ -65,6 +66,8 @@ export function Header({ sidebarCollapsed }: HeaderProps) {
               </div>
             </div>
           )}
+
+          {publicKey && <NotificationCenter />}
 
           {publicKey ? (
             <DropdownMenu>

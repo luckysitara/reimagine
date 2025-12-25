@@ -1,0 +1,10 @@
+{
+  "name": "reimagine-mobile",
+  "displayName": "reimagine",
+  "version": "1.0.0",
+  "newArchEnabled": true,
+  "platforms": ["android"],
+  "android": {
+    "versionCode": 1
+  }
+}

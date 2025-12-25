@@ -6,6 +6,7 @@ import { getTokenPrice } from "@/lib/tools/get-token-price"
 import { analyzeTokenNews } from "@/lib/tools/analyze-token-news"
 import { getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
 import { getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
+import { notifyTradingRecommendation } from "@/lib/services/notifications"
 
 const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. You help users execute blockchain operations and analyze token-related news through natural language.
 
@@ -327,6 +328,17 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
           walletAddress,
         })
 
+        await notifyTradingRecommendation(
+          `Swap Ready: ${args.inputToken} → ${args.outputToken}`,
+          `${args.amount} ${args.inputToken} will give you approximately ${result.estimatedOutput.toFixed(6)} ${args.outputToken}. Price impact: ${result.priceImpact.toFixed(2)}%`,
+          {
+            type: "swap",
+            inputToken: args.inputToken,
+            outputToken: args.outputToken,
+            amount: args.amount,
+          },
+        )
+
         return {
           success: true,
           message: `Swap prepared: ${args.amount} ${args.inputToken} → ${result.estimatedOutput.toFixed(6)} ${args.outputToken}`,
@@ -489,6 +501,17 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string) {
             takingAmount,
             expiredAt,
           })
+
+          await notifyTradingRecommendation(
+            `Limit Order Created: ${args.inputToken} → ${args.outputToken}`,
+            `Order to sell ${args.inputAmount} ${args.inputToken} at ${args.targetPrice} ${args.outputToken} has been created. Valid for ${args.expirationDays} days.`,
+            {
+              type: "limit_order",
+              inputToken: args.inputToken,
+              outputToken: args.outputToken,
+              targetPrice: args.targetPrice,
+            },
+          )
 
           console.log("[v0] Limit order result:", result)
 

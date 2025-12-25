@@ -1,0 +1,11 @@
+{
+  "name": "SeekerMobile",
+  "displayName": "Seeker Mobile",
+  "version": "1.0.0",
+  "description": "Solana Seeker Mobile - Reimagine Trading App",
+  "newArchEnabled": false,
+  "project": {
+    "projectName": "SeekerMobile",
+    "projectId": "seeker-mobile-dapp"
+  }
+}
