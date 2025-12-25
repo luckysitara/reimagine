@@ -267,16 +267,8 @@ Result: Instant settlement on Solana
 
 ### Current Team
 
-- **Founder & Lead Developer**: 10+ years in crypto, 5+ in Solana
-- **Smart Contract Engineer**: Audited 20+ protocols
-- **Full-Stack Developer**: Expert in React/Next.js/Node.js
-- **Community Manager**: 5+ years in DeFi community building
+- **Founder &  Developer**: 3+ years in crypto, 3+ in Solana
 
-### Board & Advisors
-
-- **[Advisor Name]**: Former Jupiter core team
-- **[Advisor Name]**: Solana Foundation ecosystem lead
-- **[Advisor Name]**: Metaplex DAO governance
 
 ### Hiring Plans
 
@@ -331,8 +323,8 @@ Result: Instant settlement on Solana
 ### Why Now?
 
 - ✅ Solana ecosystem maturity (ready for advanced apps)
-- ✅ AI technology adoption (Gemini 2.0 is production-ready)
-- ✅ Mobile hardware (Seeker launching Q1 2025)
+- ✅ AI technology adoption (Gemini pro is production-ready)
+- ✅ Mobile hardware (Seeker launching Q1 2026)
 - ✅ Community interest (strong demand signals in Discord/Twitter)
 
 ---
@@ -362,12 +354,9 @@ Result: Instant settlement on Solana
 ## Contact & Resources
 
 - **Website**: [solana-reimagine.vercel.app](https://solana-reimagine.vercel.app)
-- **GitHub**: [github.com/your-repo](https://github.com/your-repo)
-- **Discord**: [Join our community](https://discord.gg/reimagine)
-- **Twitter**: [@ReimagineAI](https://twitter.com/ReimagineAI)
-- **Email**: team@reimagine.ai
+
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: December 2025
 **Deck Version**: 1.0
