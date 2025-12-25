@@ -46,7 +46,6 @@ export function TradingPanel() {
   const { balance } = useSolanaBalance()
 
   const [tokens, setTokens] = useState<JupiterToken[]>([])
-  const [walletTokens, setWalletTokens] = useState<JupiterToken[]>([])
   const [inputToken, setInputToken] = useState<JupiterToken>(DEFAULT_SOL)
   const [outputToken, setOutputToken] = useState<JupiterToken>(DEFAULT_USDC)
   const [inputAmount, setInputAmount] = useState("")
@@ -59,53 +58,26 @@ export function TradingPanel() {
   const [quoteError, setQuoteError] = useState<string | null>(null)
 
   useEffect(() => {
-    getJupiterTokenList()
-      .then((allTokens) => {
-        setTokens(allTokens)
-        setWalletTokens([DEFAULT_SOL])
-      })
-      .catch((err) => {
+    const loadTokens = async () => {
+      try {
+        const allTokens = await getJupiterTokenList()
+        console.log("[v0] Loaded tokens:", allTokens.length)
+        if (allTokens.length > 0) {
+          setTokens(allTokens)
+        } else {
+          console.warn("[v0] No tokens returned from API, using defaults")
+          // Fallback to defaults
+          setTokens([DEFAULT_SOL, DEFAULT_USDC])
+        }
+      } catch (err) {
         console.error("[v0] Failed to load tokens:", err)
         toast.error("Failed to load token list")
-      })
-  }, [])
-
-  useEffect(() => {
-    const fetchWalletTokens = async () => {
-      if (!publicKey) {
-        setWalletTokens([DEFAULT_SOL])
-        return
-      }
-
-      try {
-        const response = await fetch(`/api/portfolio?wallet=${publicKey.toBase58()}`)
-        if (!response.ok) {
-          console.error("[v0] Failed to fetch wallet tokens")
-          setWalletTokens([DEFAULT_SOL])
-          return
-        }
-
-        const data = await response.json()
-        const walletTokensList: JupiterToken[] = [
-          DEFAULT_SOL,
-          ...(data.tokens || []).map((token: any) => ({
-            address: token.mint,
-            symbol: token.symbol || "UNKNOWN",
-            name: token.name || "Unknown Token",
-            decimals: token.decimals || 6,
-            logoURI: token.logoURI,
-          })),
-        ]
-
-        setWalletTokens(walletTokensList)
-      } catch (error) {
-        console.error("[v0] Error fetching wallet tokens:", error)
-        setWalletTokens([DEFAULT_SOL])
+        setTokens([DEFAULT_SOL, DEFAULT_USDC])
       }
     }
 
-    fetchWalletTokens()
-  }, [publicKey])
+    loadTokens()
+  }, [])
 
   useEffect(() => {
     if (!inputAmount || Number.parseFloat(inputAmount) <= 0) {
@@ -394,7 +366,7 @@ export function TradingPanel() {
         open={showInputTokenDialog}
         onOpenChange={setShowInputTokenDialog}
         onSelectToken={setInputToken}
-        tokens={walletTokens}
+        tokens={tokens.length > 0 ? tokens : [DEFAULT_SOL, DEFAULT_USDC]}
         excludeToken={outputToken.address}
         title="Select Token to Pay"
       />
@@ -403,7 +375,7 @@ export function TradingPanel() {
         open={showOutputTokenDialog}
         onOpenChange={setShowOutputTokenDialog}
         onSelectToken={setOutputToken}
-        tokens={tokens}
+        tokens={tokens.length > 0 ? tokens : [DEFAULT_SOL, DEFAULT_USDC]}
         excludeToken={inputToken.address}
         title="Select Token to Receive"
       />
