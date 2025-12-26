@@ -783,10 +783,9 @@ See [LICENSE](./LICENSE) for details.
 ### Resources
 
 - **Website**: https://solana-reimagine.vercel.app
-- **GitHub**: https://github.com/your-repo
-- **Discord**: [Join our community](https://discord.gg/reimagine)
-- **Twitter**: [@ReimagineAI](https://twitter.com/ReimagineAI)
-- **Email**: team@reimagine.ai
+- **GitHub**: https://github.com/luckysitara/reimagine
+- **Twitter**: [@reimagine](https://x.com/bughacker140823)
+- **Email**: bughackerjanaan@gmail.com
 
 ### Report Issues
 
@@ -798,13 +797,10 @@ Found a bug? Please open an issue on GitHub with:
 
 ---
 
-**Last Updated**: January 2025 | **Version**: 2.0 | **Status**: Production Ready
+**Last Updated**: December 2025 | **Version**: 2.0 | **Status**: Production Ready
 
-## 🎯 Solana Mobile Builder Grants Compliance
 
-This project is designed to meet all Solana Mobile Builder Grants requirements. See [GRANT_CHECKLIST.md](./GRANT_CHECKLIST.md) for complete compliance documentation.
-
-### Grant Alignment Summary
+### Summary
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
@@ -832,4 +828,4 @@ This project is designed to meet all Solana Mobile Builder Grants requirements. 
 - **Grant Checklist**: [GRANT_CHECKLIST.md](./GRANT_CHECKLIST.md)
 - **Pitch Deck**: [PITCH_DECK.md](./PITCH_DECK.md)
 - **Technical Architecture**: [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)
-- **GitHub**: [Full source code repository]
+

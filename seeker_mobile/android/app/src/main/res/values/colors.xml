@@ -1,0 +1,7 @@
+<resources>
+    <color name="window_background">#0A0E27</color>
+    <color name="status_bar">#0A0E27</color>
+    <color name="nav_bar">#0A0E27</color>
+    <color name="primary">#5B5DFF</color>
+    <color name="primary_dark">#3F41B8</color>
+</resources>

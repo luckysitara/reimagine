@@ -2,6 +2,15 @@
 
 A React Native mobile app for Solana Seeker devices that brings the power of the reimagine trading platform to Android.
 
+## Quick Start
+
+For detailed setup instructions, please see [SETUP.md](./SETUP.md) which includes:
+- Prerequisites checklist
+- Step-by-step installation
+- Environment configuration
+- Troubleshooting guide
+- Production build instructions
+
 ## Features
 
 - **Token Swap**: Trade any Solana token instantly via Jupiter aggregator
@@ -11,44 +20,59 @@ A React Native mobile app for Solana Seeker devices that brings the power of the
 - **AI Copilot**: Natural language commands for trading operations
 - **Secure Wallet Connection**: Mobile Wallet Adapter integration with cached sessions
 - **Real-time Data**: Live token prices and portfolio analytics
+- **Push Notifications**: Get alerts for order fills and price changes
 
-## Setup
+## Prerequisites
 
-### Prerequisites
-- Android SDK 28+
-- Node.js 16+
-- React Native CLI
+- **Android SDK 28+** (API Level 24+ recommended for Seeker OS)
+- **Node.js 18.0.0+**
+- **React Native CLI 12.0.0+**
+- **Java Development Kit (JDK) 11 or 17**
 
-### Installation
+## Installation
+
+### 1. Clone Repository
 
 ```bash
-cd seeker_mobile
-npm install
-# or
-yarn install
+git clone https://github.com/yourorg/reimagine.git
+cd reimagine/seeker_mobile
 ```
 
-### Configuration
+### 2. Install Dependencies
 
-Create a `.env` file in the `seeker_mobile` directory:
+```bash
+npm install
+```
+
+For detailed troubleshooting, see [SETUP.md](./SETUP.md#troubleshooting).
+
+### 3. Environment Configuration
+
+Create a `.env` file using the provided template:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your configuration:
 
 ```env
-REACT_APP_API_URL=https://solana-reimagine.vercel.app/api
-REACT_APP_JUPITER_API_KEY=your_jupiter_api_key
+REACT_APP_API_BASE_URL=https://solana-reimagine.vercel.app/api
+REACT_APP_RPC_URL=https://api.mainnet-beta.solana.com
+REACT_APP_NETWORK=mainnet-beta
 ```
 
-### Running the App
+### 4. Run the App
 
 ```bash
-npm run android
-# or
-yarn android
+npm start                    # Start Metro bundler
+npm run android             # Build and run on Android device/emulator
 ```
 
 ## Backend API Integration
 
 The app communicates with the reimagine backend at:
-- Base URL: `https://solana-reimagine.vercel.app/api`
+- **Base URL**: `https://solana-reimagine.vercel.app/api`
 
 ### Available Endpoints
 
@@ -56,67 +80,79 @@ The app communicates with the reimagine backend at:
 - `GET /jupiter/quote` - Get swap quote
 - `POST /jupiter/swap` - Execute token swap
 - `POST /jupiter/limit-orders` - Create limit order
-- `GET /jupiter/portfolio` - Get wallet portfolio
+- `GET /portfolio` - Get wallet portfolio
 - `POST /agent` - Send AI Copilot commands
+- `POST /notifications/limit-order` - Subscribe to notifications
 
 ## Architecture
 
 ```
 seeker_mobile/
 ├── src/
-│   ├── context/           # Zustand stores and context providers
-│   │   ├── WalletContext.tsx
-│   │   └── ApiContext.tsx
-│   ├── screens/           # App screens
+│   ├── app.tsx                    # Main app entry
+│   ├── context/                   # State management
+│   │   ├── WalletContext.tsx     # Wallet connection state
+│   │   ├── ApiContext.tsx        # API configuration
+│   │   └── NotificationContext.tsx
+│   ├── screens/                   # App screens
 │   │   ├── auth/
+│   │   │   └── ConnectWalletScreen.tsx
 │   │   ├── DashboardScreen.tsx
 │   │   ├── SwapScreen.tsx
 │   │   ├── PortfolioScreen.tsx
 │   │   ├── LimitOrdersScreen.tsx
 │   │   ├── CopilotScreen.tsx
+│   │   ├── NotificationSettingsScreen.tsx
 │   │   └── SettingsScreen.tsx
-│   ├── navigation/        # Navigation configuration
-│   │   └── BottomTabNavigator.tsx
-│   ├── utils/             # Utility functions
-│   └── App.tsx            # Main app component
-├── app.json               # React Native config
-├── package.json
-└── tsconfig.json
+│   ├── services/                  # API & blockchain services
+│   │   ├── api-client.ts         # HTTP client
+│   │   ├── wallet-service.ts     # Mobile Wallet Adapter
+│   │   └── notification-service.ts
+│   └── components/                # Reusable components
+├── app.json                       # React Native config
+├── package.json                   # Dependencies (updated versions)
+├── tsconfig.json                  # TypeScript config
+├── SETUP.md                       # Detailed setup guide
+└── .env.example                   # Environment template
 ```
 
 ## Wallet Connection Flow
 
 1. User connects via Mobile Wallet Adapter
-2. Authorization cached in AsyncStorage
+2. Authorization cached in AsyncStorage for persistent sessions
 3. Automatic reconnection on app launch
 4. All transactions signed securely via wallet
+5. No private keys stored on device
 
 ## State Management
 
 Using **Zustand** for lightweight state management:
-- Wallet state (address, connected status)
+- Wallet state (address, connected status, public key)
 - Portfolio data (tokens, prices, balances)
-- Trading state (quotes, orders)
+- Trading state (quotes, orders, notifications)
 
 ## Performance Optimizations
 
 - Memoized components to prevent unnecessary re-renders
 - Efficient API caching strategies
 - Lazy loading of screens
-- Optimized image handling
+- Optimized image handling for OLED displays
+- Battery-aware animation frame rates
 
-## Future Features
+## Features Status
 
-- Push notifications for order fills
-- Biometric authentication
-- Offline mode with sync
-- Advanced charting
-- Trading history
-- Multi-wallet support
-- Token creation wizard
-- NFT marketplace
-- Staking integration
-- Governance voting
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Wallet Connection | ✅ Complete | Mobile Wallet Adapter integrated |
+| Token Swap | ✅ Complete | Jupiter aggregator |
+| Portfolio View | ✅ Complete | Real-time balances |
+| Limit Orders | ✅ Complete | Price alerts |
+| AI Copilot | ✅ Complete | Natural language commands |
+| Notifications | ✅ Complete | Order fills & price alerts |
+| DCA Orders | 🔄 Planned | Q2 2025 |
+| Multi-Wallet | 🔄 Planned | Q2 2025 |
+| Offline Mode | 🔄 Planned | Q3 2025 |
+| NFT Marketplace | 🔄 Planned | Q3 2025 |
 
 ## Security
 
@@ -125,28 +161,59 @@ Using **Zustand** for lightweight state management:
 - HTTPS for all API calls
 - Input validation and sanitization
 - Session timeout after inactivity
+- Biometric authentication (planned)
 
 ## Troubleshooting
 
-### App won't connect to wallet
+For comprehensive troubleshooting, see [SETUP.md#troubleshooting](./SETUP.md#troubleshooting).
+
+### Quick Fixes
+
+**App won't connect to wallet**
 - Ensure Solana Seeker Wallet is installed
 - Check Mobile Wallet Adapter permissions
-- Clear app cache and try again
+- Clear app cache: `adb shell pm clear com.yourorg.reimagine_mobile`
 
-### API calls failing
-- Verify internet connection
-- Check backend API status
-- Confirm API URL in environment variables
+**API calls failing**
+- Verify internet connection and RPC URL
+- Check backend API status at `https://solana-reimagine.vercel.app/api`
+- Confirm API URL in `.env` file
 
-### Build issues
-- Clear node_modules and reinstall: `rm -rf node_modules && npm install`
-- Clear Android build cache: `cd android && ./gradlew clean`
-- Update Android SDK to latest version
+**Build issues**
+```bash
+rm -rf node_modules package-lock.json
+npm install
+cd android && ./gradlew clean
+npm run android
+```
+
+## Development Commands
+
+```bash
+npm start              # Start Metro bundler
+npm run android        # Build and run on Android
+npm test              # Run tests
+npm run lint          # Run ESLint
+npm run lint:fix      # Fix linting issues
+```
 
 ## Contributing
 
-Please refer to CONTRIBUTING.md in the root repository.
+Please refer to [CONTRIBUTING.md](../CONTRIBUTING.md) in the root repository.
+
+## Related Documentation
+
+- [SETUP.md](./SETUP.md) - Detailed setup and installation guide
+- [../README.md](../README.md) - Main project documentation
+- [../SOLANA_MOBILE_REQUIREMENTS.md](../SOLANA_MOBILE_REQUIREMENTS.md) - Solana Mobile grant compliance
+- [../PITCH_DECK.md](../PITCH_DECK.md) - Project pitch deck
 
 ## License
 
-MIT License - See LICENSE file
+MIT License - See [LICENSE](../LICENSE) file
+
+---
+
+**Branch**: `seeker_mobile`  
+**Last Updated**: December 26, 2025  
+**Status**: Production Ready for Solana Seeker Devices

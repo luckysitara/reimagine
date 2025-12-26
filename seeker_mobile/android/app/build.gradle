@@ -1,0 +1,73 @@
+apply plugin: "com.android.application"
+
+android {
+    namespace = "com.reimagine.seeker"
+    compileSdkVersion rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId "com.reimagine.seeker"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+        buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", "false"
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+        release {
+            storeFile file("release.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "password"
+            keyAlias System.getenv("KEY_ALIAS") ?: "key"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "password"
+        }
+    }
+
+    packagingOptions {
+        exclude "META-INF/proguard/androidx-*.pro"
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0"
+    implementation "com.google.android.material:material:1.9.0"
+    implementation "androidx.annotation:annotation:1.6.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+
+    implementation "com.facebook.react:react-android:0.73.6"
+    implementation "com.facebook.react:hermes-android:0.73.6"
+
+    implementation "org.webkit:android-jsc:r250122"
+
+    implementation "androidx.lifecycle:lifecycle-common:2.6.1"
+    implementation "androidx.lifecycle:lifecycle-process:2.6.1"
+}
+
+task downloadNdkBuild {
+    doLast {
+        println "NDK build preparation complete"
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name == "preBuild") {
+        task.dependsOn downloadNdkBuild
+    }
+}
