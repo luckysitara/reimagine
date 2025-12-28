@@ -783,10 +783,9 @@ See [LICENSE](./LICENSE) for details.
 ### Resources
 
 - **Website**: https://solana-reimagine.vercel.app
-- **GitHub**: https://github.com/your-repo
-- **Discord**: [Join our community](https://discord.gg/reimagine)
-- **Twitter**: [@ReimagineAI](https://twitter.com/ReimagineAI)
-- **Email**: team@reimagine.ai
+- **GitHub**: https://github.com/luckysitara/reimagine
+- **Twitter**: [@ReimagineAI](https://twitter.com/reimagine_sol)
+
 
 ### Report Issues
 
@@ -798,7 +797,7 @@ Found a bug? Please open an issue on GitHub with:
 
 ---
 
-**Last Updated**: January 2025 | **Version**: 2.0 | **Status**: Production Ready
+**Last Updated**: December 2025 | **Version**: 2.0 | **Status**: Production Ready
 
 ## 🎯 Solana Mobile Builder Grants Compliance
 
