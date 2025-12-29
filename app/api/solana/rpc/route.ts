@@ -25,7 +25,27 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
+    const contentType = request.headers.get("content-type")
+    if (!contentType?.includes("application/json")) {
+      return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 400 })
+    }
+
+    let body
+    try {
+      const text = await request.text()
+      if (!text) {
+        return NextResponse.json({ error: "Request body cannot be empty" }, { status: 400 })
+      }
+      body = JSON.parse(text)
+    } catch (parseError) {
+      return NextResponse.json(
+        {
+          error: "Invalid JSON in request body",
+          details: parseError instanceof Error ? parseError.message : "Unknown error",
+        },
+        { status: 400 },
+      )
+    }
 
     // Validate RPC request structure
     if (!body.method || !body.jsonrpc) {

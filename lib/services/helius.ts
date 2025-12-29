@@ -175,10 +175,10 @@ export async function getPortfolioValue(walletAddress: string): Promise<Portfoli
     // Enrich with metadata
     tokens = await enrichTokenData(tokens)
 
-    // Fetch real SOL price from Jupiter
     let solPriceUSD = 100 // Fallback
     try {
-      const priceResponse = await fetch("/api/jupiter/price?ids=So11111111111111111111111111111111111111112")
+      const priceUrl = "https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112"
+      const priceResponse = await fetch(priceUrl)
       if (priceResponse.ok) {
         const priceData = await priceResponse.json()
         if (priceData.data && typeof priceData.data === "object") {
