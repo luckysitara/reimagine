@@ -43,8 +43,6 @@
     "@react-navigation/bottom-tabs": "7.9.0",
     "@react-navigation/native": "7.1.26",
     "@react-navigation/native-stack": "7.9.0",
-    "@solana-mobile/mobile-wallet-adapter-client": "latest",
-    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "2.2.5",
     "@solana/spl-token": "^0.4.9",
     "@solana/wallet-adapter-backpack": "0.1.14",
     "@solana/wallet-adapter-base": "^0.9.23",
