@@ -18,6 +18,7 @@ Before setting up the Seeker mobile app, ensure you have:
   - Android Build Tools 34.0.0
   - Android Platform Tools 34.0.0
   - Android Emulator or connected device with Seeker OS
+<<<<<<< HEAD
   - Added proper Android SDK setup instructions
   - **Set ANDROID_HOME environment variable**:
     ```bash
@@ -35,6 +36,8 @@ Before setting up the Seeker mobile app, ensure you have:
     export PATH=$PATH:$ANDROID_HOME/tools/bin
     export PATH=$PATH:$ANDROID_HOME/platform-tools
     ```
+=======
+>>>>>>> 7db3e1be (adding autopilot order executor)
 
 - **Java Development Kit (JDK)**: Version 11 or 17
   ```bash
@@ -65,6 +68,7 @@ yarn install
 
 **Note**: If you encounter peer dependency warnings, they can be safely ignored. The app uses compatible versions.
 
+<<<<<<< HEAD
 ### 2.5. Fix Gradle Wrapper (Required for Android Build)
 
 The gradle wrapper jar needs to be downloaded separately:
@@ -79,6 +83,8 @@ fix-gradle-wrapper.bat
 
 This script automatically downloads and sets up the gradle-wrapper.jar file required for building the Android app.
 
+=======
+>>>>>>> 7db3e1be (adding autopilot order executor)
 ### 3. Configure Environment Variables
 
 Create a `.env` file in the `seeker_mobile/` directory:
@@ -103,6 +109,7 @@ REACT_APP_ENABLE_ANALYTICS=true
 
 ### 4. Setup Android Development Environment
 
+<<<<<<< HEAD
 Updated Android SDK setup with proper tools installation
 
 ```bash
@@ -167,6 +174,27 @@ $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager list avd
 
 # Start emulator
 $ANDROID_HOME/emulator/emulator -avd seeker_emulator &
+=======
+```bash
+# For macOS
+brew install android-sdk
+
+# For Linux
+sudo apt-get install android-sdk
+
+# Verify Android SDK installation
+android list avd
+```
+
+### 5. Create Android Emulator (Optional)
+
+```bash
+# List available emulators
+emulator -list-avds
+
+# Create new emulator for Seeker (API 31+)
+avdmanager create avd -n seeker_emulator -k "system-images;android-31;default;arm64-v8a"
+>>>>>>> 7db3e1be (adding autopilot order executor)
 ```
 
 ### 6. Start Development Server
@@ -175,12 +203,17 @@ $ANDROID_HOME/emulator/emulator -avd seeker_emulator &
 # Terminal 1: Start Metro bundler
 npm start
 
+<<<<<<< HEAD
 # Terminal 2: Build and run on Android (wait for Metro to start first)
+=======
+# Terminal 2: Build and run on Android
+>>>>>>> 7db3e1be (adding autopilot order executor)
 npm run android
 ```
 
 ## Troubleshooting
 
+<<<<<<< HEAD
 ### Issue: "No Metro config found"
 
 This error means metro.config.js is missing. It should be created automatically now.
@@ -212,6 +245,8 @@ export ANDROID_HOME=$HOME/Android/Sdk
 $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list
 ```
 
+=======
+>>>>>>> 7db3e1be (adding autopilot order executor)
 ### Issue: "No connected devices"
 
 ```bash
@@ -220,9 +255,12 @@ adb devices
 
 # Check if adb is in PATH
 which adb
+<<<<<<< HEAD
 
 # If not found, add to PATH
 export PATH=$PATH:$ANDROID_HOME/platform-tools
+=======
+>>>>>>> 7db3e1be (adding autopilot order executor)
 ```
 
 ### Issue: "Metro bundler port 8081 in use"
@@ -250,6 +288,7 @@ npm run android
 # Clear node_modules and reinstall
 rm -rf node_modules package-lock.json
 npm install
+<<<<<<< HEAD
 
 # Clear Metro cache
 rm -rf $TMPDIR/react-native-*
@@ -266,6 +305,8 @@ export ANDROID_HOME=$HOME/Android/Sdk          # Linux
 # Permanent fix: Add to ~/.zshrc (macOS) or ~/.bashrc (Linux)
 echo 'export ANDROID_HOME=$HOME/Library/Android/sdk' >> ~/.zshrc
 source ~/.zshrc
+=======
+>>>>>>> 7db3e1be (adding autopilot order executor)
 ```
 
 ## Running on Real Seeker Device
