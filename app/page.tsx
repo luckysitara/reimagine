@@ -11,6 +11,7 @@ import { TradingBotPanel } from "@/components/panels/trading-bot-panel"
 import { LimitOrdersPanel } from "@/components/panels/limit-orders-panel"
 import { DCAPanel } from "@/components/panels/dca-panel"
 import { SolanaCopilot } from "@/components/solana-copilot"
+import { ProtectedApp } from "@/components/protected-app"
 
 export default function Page() {
   const [activePanel, setActivePanel] = useState("Swap")
@@ -46,24 +47,26 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
-      <CollapsibleSidebar
-        activePanel={activePanel}
-        onPanelChange={setActivePanel}
-        onCollapseChange={setSidebarCollapsed}
-      />
+    <ProtectedApp>
+      <div className="flex h-screen w-screen overflow-hidden bg-background">
+        <CollapsibleSidebar
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          onCollapseChange={setSidebarCollapsed}
+        />
 
-      <div
-        className={`flex flex-1 flex-col transition-all duration-300 ${
-          sidebarCollapsed ? "ml-0 lg:ml-16" : "ml-0 lg:ml-64"
-        }`}
-      >
-        <Header sidebarCollapsed={sidebarCollapsed} />
+        <div
+          className={`flex flex-1 flex-col transition-all duration-300 ${
+            sidebarCollapsed ? "ml-0 lg:ml-16" : "ml-0 lg:ml-64"
+          }`}
+        >
+          <Header sidebarCollapsed={sidebarCollapsed} />
 
-        <main className="flex-1 overflow-auto">
-          <div className="container mx-auto p-4 lg:p-6 max-w-7xl">{renderPanel()}</div>
-        </main>
+          <main className="flex-1 overflow-auto">
+            <div className="container mx-auto p-4 lg:p-6 max-w-7xl">{renderPanel()}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ProtectedApp>
   )
 }
