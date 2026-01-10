@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowDownUp, Settings, Loader2, AlertCircle } from "lucide-react"
+import { ArrowDownUp, Loader2, AlertCircle, TrendingUp } from "lucide-react"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,6 +39,13 @@ const DEFAULT_USDC = {
     "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
 }
 
+const PERCENTAGE_BUTTONS = [
+  { label: "10%", value: 0.1 },
+  { label: "25%", value: 0.25 },
+  { label: "50%", value: 0.5 },
+  { label: "100%", value: 1 },
+]
+
 export function TradingPanel() {
   const { publicKey, signTransaction } = useWallet()
   const { connection } = useConnection()
@@ -49,6 +56,7 @@ export function TradingPanel() {
   const [inputToken, setInputToken] = useState<JupiterToken>(DEFAULT_SOL)
   const [outputToken, setOutputToken] = useState<JupiterToken>(DEFAULT_USDC)
   const [inputAmount, setInputAmount] = useState("")
+  const [inputUSDValue, setInputUSDValue] = useState("")
   const [outputAmount, setOutputAmount] = useState("")
   const [quote, setQuote] = useState<JupiterQuote | null>(null)
   const [isLoadingQuote, setIsLoadingQuote] = useState(false)
@@ -56,6 +64,8 @@ export function TradingPanel() {
   const [showInputTokenDialog, setShowInputTokenDialog] = useState(false)
   const [showOutputTokenDialog, setShowOutputTokenDialog] = useState(false)
   const [quoteError, setQuoteError] = useState<string | null>(null)
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({})
+  const [loadingPrices, setLoadingPrices] = useState(false)
 
   useEffect(() => {
     const loadTokens = async () => {
@@ -64,10 +74,6 @@ export function TradingPanel() {
         console.log("[v0] Loaded tokens:", allTokens.length)
         if (allTokens.length > 0) {
           setTokens(allTokens)
-        } else {
-          console.warn("[v0] No tokens returned from API, using defaults")
-          // Fallback to defaults
-          setTokens([DEFAULT_SOL, DEFAULT_USDC])
         }
       } catch (err) {
         console.error("[v0] Failed to load tokens:", err)
@@ -80,11 +86,44 @@ export function TradingPanel() {
   }, [])
 
   useEffect(() => {
+    const fetchPrices = async () => {
+      if (!inputToken || !outputToken) return
+
+      setLoadingPrices(true)
+      try {
+        const [inputPrice, outputPrice] = await Promise.all([
+          fetch(`/api/token-price?symbol=${inputToken.symbol}`).then((r) => r.json()),
+          fetch(`/api/token-price?symbol=${outputToken.symbol}`).then((r) => r.json()),
+        ])
+
+        const prices: Record<string, number> = {}
+        if (inputPrice?.priceUSD) prices[inputToken.symbol] = inputPrice.priceUSD
+        if (outputPrice?.priceUSD) prices[outputToken.symbol] = outputPrice.priceUSD
+
+        setTokenPrices(prices)
+      } catch (err) {
+        console.error("[v0] Failed to fetch prices:", err)
+      } finally {
+        setLoadingPrices(false)
+      }
+    }
+
+    fetchPrices()
+  }, [inputToken, outputToken])
+
+  useEffect(() => {
     if (!inputAmount || Number.parseFloat(inputAmount) <= 0) {
       setQuote(null)
       setOutputAmount("")
+      setInputUSDValue("")
       setQuoteError(null)
       return
+    }
+
+    const amount = Number.parseFloat(inputAmount)
+    const price = tokenPrices[inputToken.symbol] || 0
+    if (price > 0) {
+      setInputUSDValue((amount * price).toFixed(2))
     }
 
     if (!publicKey) {
@@ -100,7 +139,7 @@ export function TradingPanel() {
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputAmount, inputToken, outputToken, publicKey])
+  }, [inputAmount, inputToken, outputToken, publicKey, tokenPrices])
 
   const fetchQuote = async () => {
     if (!publicKey) {
@@ -113,13 +152,6 @@ export function TradingPanel() {
       setQuoteError(null)
       const amount = Math.floor(Number.parseFloat(inputAmount) * Math.pow(10, inputToken.decimals))
 
-      console.log("[v0] Fetching Jupiter Ultra order for:", {
-        input: inputToken.symbol,
-        output: outputToken.symbol,
-        amount,
-        wallet: publicKey.toBase58(),
-      })
-
       const quoteResponse = await getJupiterQuote(
         inputToken.address,
         outputToken.address,
@@ -127,6 +159,14 @@ export function TradingPanel() {
         100,
         publicKey.toBase58(),
       )
+
+      if (!quoteResponse || !quoteResponse.outAmount) {
+        setQuote(null)
+        setOutputAmount("")
+        setQuoteError("Failed to get quote. Please try again.")
+        setIsLoadingQuote(false)
+        return
+      }
 
       setQuote(quoteResponse)
       const output = Number.parseInt(quoteResponse.outAmount) / Math.pow(10, outputToken.decimals)
@@ -139,69 +179,63 @@ export function TradingPanel() {
 
       if (error instanceof Error) {
         if (error.message.includes("Insufficient")) {
-          setQuoteError(`Insufficient ${inputToken.symbol} balance. Please reduce the amount or add more funds.`)
+          setQuoteError(`Insufficient ${inputToken.symbol} balance`)
         } else if (error.message.includes("liquidity")) {
-          setQuoteError(`No liquidity available for this ${inputToken.symbol}/${outputToken.symbol} pair.`)
-        } else if (error.message.includes("swap route")) {
-          setQuoteError(`No swap route found. Try a different token pair or smaller amount.`)
+          setQuoteError(`No liquidity for ${inputToken.symbol}/${outputToken.symbol}`)
         } else {
           setQuoteError(error.message)
         }
-      } else {
-        setQuoteError("Failed to get quote. Please try again.")
       }
+      setIsLoadingQuote(false)
     } finally {
       setIsLoadingQuote(false)
     }
   }
 
-  const handleSwap = async () => {
-    if (!publicKey || !signTransaction) {
-      setVisible(true)
+  const handleUSDInput = (usdAmount: string) => {
+    setInputUSDValue(usdAmount)
+
+    if (!usdAmount || Number.parseFloat(usdAmount) <= 0) {
+      setInputAmount("")
       return
     }
 
-    if (!quote) {
-      toast.error("No quote available")
+    const price = tokenPrices[inputToken.symbol] || 0
+    if (price > 0) {
+      const tokenAmount = Number.parseFloat(usdAmount) / price
+      setInputAmount(tokenAmount.toString())
+    } else {
+      toast.error(`Price not available for ${inputToken.symbol}`)
+    }
+  }
+
+  const handlePercentageClick = (percentage: number) => {
+    if (!balance) {
+      toast.error("Unable to determine wallet balance")
       return
     }
+
+    const amount = balance * percentage
+    setInputAmount(amount.toString())
+  }
+
+  const handleSwap = async () => {
+    if (!publicKey || !signTransaction || !quote) {
+      toast.error("Please connect your wallet")
+      return
+    }
+
+    setIsSwapping(true)
 
     try {
-      setIsSwapping(true)
-      toast.loading("Preparing swap transaction...")
-
-      console.log("[v0] Starting swap with quote:", {
-        inputMint: quote.inputMint,
-        outputMint: quote.outputMint,
-        inAmount: quote.inAmount,
-        outAmount: quote.outAmount,
-        hasTransaction: !!quote.transaction,
-        requestId: quote.requestId,
-      })
-
-      toast.loading("Waiting for wallet signature...")
-
       const result = await executeSwap(connection, quote.transaction, signTransaction, quote.requestId)
 
       if (result.success) {
-        toast.success("Swap successful!", {
-          description: (
-            <a
-              href={`https://solscan.io/tx/${result.signature}${
-                process.env.NEXT_PUBLIC_SOLANA_NETWORK !== "mainnet-beta" ? "?cluster=devnet" : ""
-              }`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              View on Solscan
-            </a>
-          ),
-        })
+        toast.success(`Swap successful! Signature: ${result.signature?.slice(0, 8)}...`)
         setInputAmount("")
         setOutputAmount("")
+        setInputUSDValue("")
         setQuote(null)
-        setQuoteError(null)
       } else {
         toast.error(result.error || "Swap failed")
       }
@@ -213,172 +247,205 @@ export function TradingPanel() {
     }
   }
 
-  const handleFlipTokens = () => {
-    setInputToken(outputToken)
-    setOutputToken(inputToken)
-    setInputAmount(outputAmount)
-    setOutputAmount("")
-    setQuote(null)
-    setQuoteError(null)
-  }
-
-  const priceImpact = quote ? Number.parseFloat(quote.priceImpactPct) : 0
-  const priceImpactColor = priceImpact < 1 ? "text-success" : priceImpact < 3 ? "text-warning" : "text-destructive"
-
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Token Swap</CardTitle>
-              <CardDescription>Trade any Solana token instantly</CardDescription>
-            </div>
-            <Button variant="ghost" size="icon">
-              <Settings className="h-4 w-4" />
-            </Button>
-          </div>
+    <div className="space-y-4">
+      <Card className="border-border bg-card">
+        <CardHeader className="border-b border-border pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <ArrowDownUp className="h-5 w-5 text-accent" />
+            Swap Tokens
+          </CardTitle>
+          <CardDescription>Exchange tokens instantly on Jupiter DEX</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {quoteError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{quoteError}</AlertDescription>
-            </Alert>
-          )}
 
-          <div className="space-y-2">
-            <Label>You Pay</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                placeholder="0.00"
-                className="flex-1"
-                value={inputAmount}
-                onChange={(e) => setInputAmount(e.target.value)}
-              />
-              <Button
-                variant="outline"
-                className="w-32 gap-2 bg-transparent"
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            {/* Input Token Section */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">You Pay</Label>
+
+              {/* Token Selection */}
+              <button
                 onClick={() => setShowInputTokenDialog(true)}
+                className="w-full rounded-lg border border-border bg-background px-4 py-3 text-left hover:bg-background/80 transition-colors"
               >
-                {inputToken.logoURI && (
-                  <Avatar className="h-5 w-5">
-                    <AvatarImage src={inputToken.logoURI || "/placeholder.svg"} />
-                    <AvatarFallback>{inputToken.symbol[0]}</AvatarFallback>
-                  </Avatar>
-                )}
-                {inputToken.symbol}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Balance: {inputToken.symbol === "SOL" ? balance.toFixed(4) : "0"} {inputToken.symbol}
-            </p>
-          </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {inputToken.logoURI && (
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={inputToken.logoURI || "/placeholder.svg"} />
+                        <AvatarFallback>{inputToken.symbol[0]}</AvatarFallback>
+                      </Avatar>
+                    )}
+                    <span className="font-mono text-sm font-semibold">{inputToken.symbol}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Balance: {balance?.toFixed(4)}</span>
+                </div>
+              </button>
 
-          <div className="flex justify-center">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={handleFlipTokens}>
-              <ArrowDownUp className="h-4 w-4" />
-            </Button>
-          </div>
+              {/* Input Amount - Token Amount */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Token Amount</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={inputAmount}
+                  onChange={(e) => setInputAmount(e.target.value)}
+                  className="bg-background/50"
+                  step="any"
+                  min="0"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label>You Receive</Label>
-            <div className="flex gap-2">
-              <Input type="number" placeholder="0.00" className="flex-1" value={outputAmount} readOnly />
-              <Button
-                variant="outline"
-                className="w-32 gap-2 bg-transparent"
-                onClick={() => setShowOutputTokenDialog(true)}
-              >
-                {outputToken.logoURI && (
-                  <Avatar className="h-5 w-5">
-                    <AvatarImage src={outputToken.logoURI || "/placeholder.svg"} />
-                    <AvatarFallback>{outputToken.symbol[0]}</AvatarFallback>
-                  </Avatar>
-                )}
-                {outputToken.symbol}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Balance: {outputToken.symbol === "SOL" ? balance.toFixed(4) : "0"} {outputToken.symbol}
-            </p>
-          </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">USD Value</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00 USD"
+                  value={inputUSDValue}
+                  onChange={(e) => handleUSDInput(e.target.value)}
+                  className="bg-background/50"
+                  step="any"
+                  min="0"
+                />
+              </div>
 
-          {quote && (
-            <div className="space-y-2 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Rate</span>
-                <span className="font-medium">
-                  1 {inputToken.symbol} ≈{" "}
-                  {(Number.parseFloat(outputAmount) / Number.parseFloat(inputAmount)).toFixed(4)} {outputToken.symbol}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Price Impact</span>
-                <span className={`font-medium ${priceImpactColor}`}>{Math.abs(priceImpact).toFixed(2)}%</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Network Fee</span>
-                <span className="font-medium">~0.00005 SOL</span>
-              </div>
-              {Math.abs(priceImpact) > 3 && (
-                <Alert variant="default" className="mt-2 border-amber-500/50 bg-amber-500/10">
-                  <AlertCircle className="h-4 w-4 text-amber-500" />
-                  <AlertDescription className="text-xs">
-                    High price impact! Consider reducing the amount.
-                  </AlertDescription>
-                </Alert>
+              {balance && balance > 0 && (
+                <div className="flex gap-2 pt-2">
+                  {PERCENTAGE_BUTTONS.map((btn) => (
+                    <Button
+                      key={btn.label}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePercentageClick(btn.value)}
+                      className="flex-1 text-xs"
+                    >
+                      {btn.label}
+                    </Button>
+                  ))}
+                </div>
               )}
             </div>
-          )}
 
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleSwap}
-            disabled={!publicKey || !quote || isSwapping || isLoadingQuote || !!quoteError}
-          >
-            {isSwapping ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Swapping...
-              </>
-            ) : isLoadingQuote ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Getting Quote...
-              </>
-            ) : !publicKey ? (
-              "Connect Wallet to Swap"
-            ) : quoteError ? (
-              "Cannot Swap"
-            ) : !quote ? (
-              "Enter Amount"
-            ) : (
-              "Swap"
+            {/* Swap Direction Button */}
+            <div className="flex justify-center">
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => {
+                  const temp = inputToken
+                  setInputToken(outputToken)
+                  setOutputToken(temp)
+                  setInputAmount("")
+                  setOutputAmount("")
+                  setInputUSDValue("")
+                  setQuote(null)
+                }}
+                className="rounded-full"
+              >
+                <ArrowDownUp className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Output Token Section */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">You Receive</Label>
+
+              <button
+                onClick={() => setShowOutputTokenDialog(true)}
+                className="w-full rounded-lg border border-border bg-background px-4 py-3 text-left hover:bg-background/80 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {outputToken.logoURI && (
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={outputToken.logoURI || "/placeholder.svg"} />
+                      <AvatarFallback>{outputToken.symbol[0]}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <span className="font-mono text-sm font-semibold">{outputToken.symbol}</span>
+                </div>
+              </button>
+
+              <Input type="number" placeholder="0.00" value={outputAmount} disabled className="bg-background/50" />
+            </div>
+
+            {/* Quote Details */}
+            {quote && !isLoadingQuote && (
+              <Alert className="border-green-500/50 bg-green-500/10">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                <AlertDescription className="text-green-700 dark:text-green-400 text-xs">
+                  <div className="flex justify-between mt-1">
+                    <span>Price Impact:</span>
+                    <span className="font-mono">{quote.priceImpactPct}%</span>
+                  </div>
+                </AlertDescription>
+              </Alert>
             )}
-          </Button>
+
+            {quoteError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">{quoteError}</AlertDescription>
+              </Alert>
+            )}
+
+            {isLoadingQuote && (
+              <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Getting quote...
+              </div>
+            )}
+
+            {/* Swap Button */}
+            <Button
+              onClick={handleSwap}
+              disabled={!quote || isSwapping || isLoadingQuote || !publicKey}
+              className="w-full"
+              size="lg"
+            >
+              {!publicKey ? (
+                "Connect Wallet"
+              ) : isSwapping ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Swapping...
+                </>
+              ) : (
+                `Swap ${inputToken.symbol} for ${outputToken.symbol}`
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
+      {/* Token Search Dialogs */}
       <TokenSearchDialog
-        open={showInputTokenDialog}
-        onOpenChange={setShowInputTokenDialog}
-        onSelectToken={setInputToken}
-        tokens={tokens.length > 0 ? tokens : [DEFAULT_SOL, DEFAULT_USDC]}
-        excludeToken={outputToken.address}
-        title="Select Token to Pay"
+        isOpen={showInputTokenDialog}
+        onClose={() => setShowInputTokenDialog(false)}
+        onSelect={(token) => {
+          setInputToken(token)
+          setShowInputTokenDialog(false)
+          setInputAmount("")
+          setOutputAmount("")
+          setInputUSDValue("")
+        }}
+        tokens={tokens}
+        excludeAddress={outputToken.address}
       />
 
       <TokenSearchDialog
-        open={showOutputTokenDialog}
-        onOpenChange={setShowOutputTokenDialog}
-        onSelectToken={setOutputToken}
-        tokens={tokens.length > 0 ? tokens : [DEFAULT_SOL, DEFAULT_USDC]}
-        excludeToken={inputToken.address}
-        title="Select Token to Receive"
+        isOpen={showOutputTokenDialog}
+        onClose={() => setShowOutputTokenDialog(false)}
+        onSelect={(token) => {
+          setOutputToken(token)
+          setShowOutputTokenDialog(false)
+          setInputAmount("")
+          setOutputAmount("")
+          setInputUSDValue("")
+        }}
+        tokens={tokens}
+        excludeAddress={inputToken.address}
       />
-    </>
+    </div>
   )
 }

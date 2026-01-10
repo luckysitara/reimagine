@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 
 const navigation = [
   { name: "Swap", icon: ArrowLeftRight, href: "#swap" },
+  { name: "Token Discovery", icon: TrendingUp, href: "#discovery" },
   { name: "AI Copilot", icon: Sparkles, href: "#copilot" },
   { name: "Portfolio", icon: Wallet, href: "#portfolio" },
   { name: "Limit Orders", icon: Target, href: "#limit-orders" },

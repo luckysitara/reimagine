@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Header } from "@/components/header"
 import { CollapsibleSidebar } from "@/components/collapsible-sidebar"
 import { TradingPanel } from "@/components/panels/trading-panel"
+import { TokenDiscoveryPanel } from "@/components/panels/token-discovery-panel"
 import { PortfolioPanel } from "@/components/panels/portfolio-panel"
 import { NFTPanel } from "@/components/panels/nft-panel"
 import { TokenStudioPanel } from "@/components/panels/token-studio-panel"
@@ -21,6 +22,8 @@ export default function Page() {
     switch (activePanel) {
       case "Swap":
         return <TradingPanel />
+      case "Token Discovery":
+        return <TokenDiscoveryPanel />
       case "AI Copilot":
         return <SolanaCopilot />
       case "Portfolio":

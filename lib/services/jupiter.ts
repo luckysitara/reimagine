@@ -1,20 +1,11 @@
 import { type Connection, VersionedTransaction } from "@solana/web3.js"
 import { Buffer } from "buffer"
 import { secureRPCClient } from "@/lib/utils/rpc-client"
+import { getAbsoluteUrl, getJupiterHeaders, JUPITER_API_URLS } from "@/lib/constants/api-urls"
 
 const JUPITER_ULTRA_API = "https://api.jup.ag/ultra/v1"
 
 const JUPITER_API_KEY = typeof window === "undefined" ? process.env.JUPITER_API_KEY : undefined
-
-function getJupiterHeaders(): HeadersInit {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (JUPITER_API_KEY) {
-    headers["x-api-key"] = JUPITER_API_KEY
-  }
-  return headers
-}
 
 export interface JupiterToken {
   address: string
@@ -39,6 +30,13 @@ export interface JupiterQuote {
   errorCode?: number
 }
 
+export interface QuoteResponse {
+  inAmount: string
+  outAmount: string
+  routePlan?: any[]
+  priceImpactPct: string
+}
+
 export interface SwapResult {
   success: boolean
   signature?: string
@@ -48,7 +46,7 @@ export interface SwapResult {
 
 export async function getJupiterTokenList(): Promise<JupiterToken[]> {
   try {
-    const response = await fetch("/api/jupiter/tokens", {
+    const response = await fetch(getAbsoluteUrl("/api/jupiter/tokens"), {
       headers: {
         "Cache-Control": "max-age=300",
       },
@@ -57,18 +55,16 @@ export async function getJupiterTokenList(): Promise<JupiterToken[]> {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       console.error("[v0] Token list error:", errorData)
-      return []
+      return getCommonTokensFallback()
     }
 
     const data = await response.json()
 
-    // Handle both array and object responses
+    let tokens: JupiterToken[] = []
     if (Array.isArray(data)) {
-      return data.filter((token: any) => token.address && token.symbol && token.decimals !== undefined)
-    }
-
-    if (typeof data === "object" && data !== null) {
-      return Object.values(data)
+      tokens = data.filter((token: any) => token.address && token.symbol && token.decimals !== undefined)
+    } else if (typeof data === "object" && data !== null) {
+      tokens = Object.values(data)
         .filter(
           (token: any) =>
             token && typeof token === "object" && token.address && token.symbol && token.decimals !== undefined,
@@ -76,12 +72,62 @@ export async function getJupiterTokenList(): Promise<JupiterToken[]> {
         .slice(0, 2000)
     }
 
-    console.warn("[v0] Token list in unexpected format:", typeof data)
-    return []
+    const commonTokens = getCommonTokensFallback()
+    const tokenMap = new Map<string, JupiterToken>()
+
+    commonTokens.forEach((t) => tokenMap.set(t.address.toLowerCase(), t))
+    tokens.forEach((t) => tokenMap.set(t.address.toLowerCase(), t))
+
+    return Array.from(tokenMap.values())
   } catch (error) {
     console.error("[v0] Jupiter token list fetch error:", error)
-    return []
+    return getCommonTokensFallback()
   }
+}
+
+function getCommonTokensFallback(): JupiterToken[] {
+  return [
+    {
+      address: "So11111111111111111111111111111111111111112",
+      symbol: "SOL",
+      name: "Solana",
+      decimals: 9,
+      logoURI:
+        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+    },
+    {
+      address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      symbol: "USDC",
+      name: "USD Coin",
+      decimals: 6,
+      logoURI:
+        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
+    },
+    {
+      address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenEsw",
+      symbol: "USDT",
+      name: "Tether USD",
+      decimals: 6,
+      logoURI:
+        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenEsw/logo.png",
+    },
+    {
+      address: "DezXAZ8z7PnrnRJjoBRwWQVzEjVAn81VolNAH3vtN2g",
+      symbol: "BONK",
+      name: "Bonk",
+      decimals: 5,
+      logoURI:
+        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/DezXAZ8z7PnrnRJjoBRwWQVzEjVAn81VolNAH3vtN2g/logo.png",
+    },
+    {
+      address: "JUPyiwrYJFskUPiHa7hKeAlrjUzNcfCP5AJbNbLAXUc",
+      symbol: "JUP",
+      name: "Jupiter",
+      decimals: 6,
+      logoURI:
+        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/JUPyiwrYJFskUPiHa7hKeAlrjUzNcfCP5AJbNbLAXUc/logo.png",
+    },
+  ]
 }
 
 export async function findTokenBySymbol(symbol: string, ignoreCache = false): Promise<JupiterToken | null> {
@@ -215,89 +261,45 @@ export async function getJupiterQuote(
   outputMint: string,
   amount: number,
   slippageBps = 100,
-  taker?: string,
-): Promise<JupiterQuote> {
+  userPublicKey?: string,
+): Promise<QuoteResponse | null> {
   try {
-    if (!taker) {
-      throw new Error("Wallet address is required. Please connect your wallet to get quotes.")
+    if (!amount || amount <= 0 || !Number.isFinite(amount)) {
+      console.error("[v0] Invalid quote amount:", amount)
+      return null
     }
 
-    if (amount <= 0) {
-      throw new Error("Amount must be greater than 0")
-    }
-
-    if (!inputMint || inputMint.length < 30) {
-      throw new Error("Invalid input token mint address")
-    }
-    if (!outputMint || outputMint.length < 30) {
-      throw new Error("Invalid output token mint address")
-    }
-
-    const params = new URLSearchParams({
-      inputMint,
-      outputMint,
-      amount: amount.toString(),
-      slippageBps: slippageBps.toString(),
-      taker,
-    })
-
-    const url = `/api/jupiter/order?${params.toString()}`
-
-    console.log("[v0] Fetching Jupiter quote:", {
-      inputMint,
-      outputMint,
-      amount,
-      amountDecimals: amount.toString().length,
-    })
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-    const response = await fetch(url, {
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId))
+    const response = await fetch(
+      `/api/jupiter/quote?` +
+        `inputMint=${inputMint}&` +
+        `outputMint=${outputMint}&` +
+        `amount=${Math.floor(amount)}&` +
+        `slippageBps=${slippageBps}${userPublicKey ? `&userPublicKey=${userPublicKey}` : ""}`,
+    )
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      const errorMsg = errorData.error || errorData.details?.errorMessage || `HTTP ${response.status}`
-
-      console.error("[v0] Jupiter quote error:", errorMsg)
-
-      if (errorMsg.includes("Insufficient") || errorMsg.includes("insufficient")) {
-        throw new Error(
-          "Insufficient balance for this swap. Please reduce the amount or add more funds to your wallet.",
-        )
-      }
-
-      if (errorMsg.includes("no route") || errorMsg.includes("No swap route") || errorMsg.includes("liquidity")) {
-        throw new Error(`No liquidity available for this token pair. Try a different pair or smaller amount.`)
-      }
-
-      throw new Error(errorMsg || "Failed to get quote from Jupiter")
+      console.error("[v0] Quote error:", errorData)
+      return null
     }
 
-    const order = await response.json()
+    const data = await response.json()
 
-    if (order.error || order.errorMessage) {
-      const errorMsg = order.errorMessage || order.error
-
-      if (errorMsg.includes("Insufficient") || order.errorCode === 1) {
-        throw new Error("Insufficient balance for this swap (including network fees).")
-      }
-
-      throw new Error(errorMsg)
+    if (data.error) {
+      console.error("[v0] Quote error:", data.error)
+      return null
     }
 
-    if (!order.transaction || order.transaction.length === 0) {
-      console.error("[v0] Order response missing valid transaction. Response:", Object.keys(order).join(", "))
-      throw new Error("No valid swap route found. Try reducing the amount or selecting a different token pair.")
-    }
-
-    console.log("[v0] Quote received successfully")
-    return order
+    return data
   } catch (error) {
-    console.error("[v0] getJupiterQuote error:", error)
-    throw error
+    let msg = "Unknown error"
+    if (error instanceof Error) {
+      msg = error.message
+    } else if (error instanceof String) {
+      msg = String(error)
+    }
+    console.error("[v0] getJupiterQuote error:", msg)
+    return null
   }
 }
 
@@ -514,5 +516,162 @@ export async function executeSwap(
       success: false,
       error: errorMessage,
     }
+  }
+}
+
+export type Interval = "5m" | "1h" | "6h" | "24h"
+export type Category = "toptraded" | "toptrending" | "toporganicscore" | "recent"
+
+export interface TokenInfo extends JupiterToken {
+  holderCount?: number
+  organicScore?: number
+  organicScoreLabel?: string
+  usdPrice?: number
+  mcap?: number
+  fdv?: number
+  liquidity?: number
+  firstPool?: {
+    id: string
+    createdAt: string
+  }
+  stats24h?: {
+    priceChange: number
+    buyVolume: number
+    traderCount: number
+  }
+}
+
+/**
+ * Search tokens by symbol, name, or mint address
+ * Supports comma-separated values for multiple searches
+ */
+export async function searchTokensAdvanced(query: string): Promise<TokenInfo[]> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/search?query=${encodeURIComponent(query)}`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Token search error:", response.status)
+      return []
+    }
+
+    const data = await response.json()
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error("[v0] Token search error:", error)
+    return []
+  }
+}
+
+/**
+ * Get tokens by category with time interval
+ * Categories: toptraded, toptrending, toporganicscore, recent
+ * Intervals: 5m, 1h, 6h, 24h
+ */
+export async function getTokensByCategory(category: Category, interval: Interval, limit = 50): Promise<TokenInfo[]> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/${category}/${interval}?limit=${limit}`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Category tokens error:", response.status)
+      return []
+    }
+
+    const data = await response.json()
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error("[v0] Category tokens error:", error)
+    return []
+  }
+}
+
+/**
+ * Get recently created tokens (first pool creation)
+ * Useful for discovering new tokens
+ */
+export async function getRecentTokens(limit = 30): Promise<TokenInfo[]> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/recent?limit=${limit}`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Recent tokens error:", response.status)
+      return []
+    }
+
+    const data = await response.json()
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error("[v0] Recent tokens error:", error)
+    return []
+  }
+}
+
+/**
+ * Get tokens by tag (verified or lst)
+ */
+export async function getTokensByTag(tag: "verified" | "lst"): Promise<TokenInfo[]> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/tag?query=${tag}`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Tag tokens error:", response.status)
+      return []
+    }
+
+    const data = await response.json()
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error("[v0] Tag tokens error:", error)
+    return []
+  }
+}
+
+/**
+ * Get trending/cooking content for tokens
+ * Returns content for tokens that are currently trending
+ */
+export async function getCookingContent(): Promise<any> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/content/cooking`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Cooking content error:", response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error("[v0] Cooking content error:", error)
+    return null
+  }
+}
+
+/**
+ * Get content for specific mints
+ */
+export async function getContentByMints(mints: string[]): Promise<any> {
+  try {
+    const response = await fetch(`${JUPITER_API_URLS.tokensV2}/content?mints=${mints.join(",")}`, {
+      headers: getJupiterHeaders(),
+    })
+
+    if (!response.ok) {
+      console.error("[v0] Content by mints error:", response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error("[v0] Content by mints error:", error)
+    return null
   }
 }

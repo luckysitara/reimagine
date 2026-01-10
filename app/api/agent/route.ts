@@ -8,59 +8,27 @@ import { getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
 import { getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
 import { notifyTradingRecommendation } from "@/lib/services/notifications"
 
-const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. You help users execute blockchain operations and analyze token-related news through natural language.
+const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. Provide clear, concise responses.
 
 Capabilities:
-- Execute single token swaps using Jupiter DEX Ultra API
-- Execute multi-token swaps to consolidate multiple tokens into one (reduce clutter, minimize fees)
-- Create and manage limit orders (buy/sell at target prices)
-- Create and manage DCA orders (dollar-cost averaging for automated recurring purchases)
+- Execute single/multi token swaps via Jupiter DEX
+- Create and manage limit orders and DCA (dollar-cost averaging)
 - Create new SPL tokens with custom metadata
-- View and cancel active limit/DCA orders
-- Provide portfolio analysis and recommendations
-- Fetch real-time token prices
-- Analyze news and social media for tokens, including sentiment and trends
-- Operate in autopilot mode to proactively monitor portfolios, prices, and news
-- Explain DeFi concepts in simple terms
-- Help users make informed trading decisions
+- View and cancel active orders
+- Portfolio analysis with diversification scoring
+- Real-time token pricing and news analysis with sentiment
+- Autopilot mode for proactive monitoring
 
-When users want to consolidate/clear multiple tokens:
-1. Use get_wallet_tokens or analyze_portfolio to see all tokens
-2. Ask which tokens they want to swap and what output token they prefer (SOL/USDC recommended)
-3. Use execute_multi_swap with an array of token symbols and amounts
-4. Each swap will be prepared individually and executed sequentially
+Key instructions:
+1. Be concise - avoid repeating yourself
+2. For swaps: extract input/output tokens and amounts
+3. For orders: ask for token, amount, and target price/frequency
+4. For news: fetch and summarize sentiment, key news, and risks
+5. Always verify wallet connection before operations
+6. Format large numbers with K/M suffix
+7. Warn about price impact >1%
 
-When users ask about creating orders:
-1. Verify wallet connection
-2. Extract tokens, amounts, and order parameters
-3. Use the appropriate tool (create_limit_order or create_dca_order)
-4. Return transaction details for user to sign
-
-When users want to see their orders:
-- Use get_active_orders to fetch limit and DCA orders
-- Display them in an organized, readable format
-
-When users ask about token news:
-1. Extract the token symbol and optional time range
-2. Use the analyze_token_news tool to fetch and analyze data
-3. Summarize findings clearly, highlighting sentiment, key news, and risks
-
-For swaps:
-1. Verify wallet connection
-2. Extract input/output tokens and amount
-3. Use execute_swap, confirm details, and warn about price impact (>1%)
-
-For token creation:
-1. Extract name, symbol, decimals, supply, and optional metadata
-2. Verify sufficient SOL balance (minimum 0.1 SOL required)
-3. Use create_token to prepare the transaction
-
-In autopilot mode:
-- Monitor portfolio, prices, and news periodically
-- Notify users of significant changes or opportunities
-- Suggest actions but require confirmation for swaps
-
-Prioritize security, clarity, and non-technical language. Use metric formatting (K, M).`
+Security first - never ask for private keys.`
 
 const tools = [
   {
@@ -894,193 +862,300 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3, initial
   throw lastError || new Error("Max retries exceeded")
 }
 
-export async function POST(request: Request) {
-  const encoder = new TextEncoder()
-  const stream = new TransformStream()
-  const writer = stream.writable.getWriter()
+async function executeAgentWithStream(
+  messages: any[],
+  walletAddress: string | undefined,
+): Promise<ReadableStream<Uint8Array> | null> {
+  const client = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "")
+  const model = client.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
 
-  const sendMessage = async (data: any) => {
-    try {
-      await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-    } catch (error) {
-      console.error("[v0] Failed to send message:", error)
+  const response = await model.generateContentStream({
+    systemInstruction: systemPrompt,
+    tools,
+    contents: messages.map((msg: any) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [
+        {
+          text: msg.content,
+        },
+      ],
+    })),
+  })
+
+  const stream = response.stream
+  const toolResultsToAdd: Array<{ role: string; parts: Array<{ text: string }> }> = []
+
+  const processStream = async () => {
+    const encoder = new TextEncoder()
+    let buffer = ""
+
+    let fullText = ""
+    let contentIndex = 0
+    let hasMore = true
+    const toolCalls: any[] = []
+
+    while (hasMore) {
+      const value = await stream.next()
+      hasMore = !value.done
+
+      if (value.value) {
+        const response = value.value
+
+        for (const part of response.candidates[0].content.parts) {
+          if (part.text) {
+            fullText += part.text
+
+            // Stream text chunks
+            if (part.text.length > 0) {
+              const newText = part.text.slice(contentIndex)
+              contentIndex = part.text.length
+
+              // Split and send chunks to avoid overwhelming the client
+              const lines = newText.split(/(?<=[.!?])\s+/)
+              for (const line of lines) {
+                if (line.trim()) {
+                  buffer += line + " "
+
+                  // Send chunks every sentence or when buffer gets large
+                  if (buffer.length > 100 || line.endsWith(".")) {
+                    return {
+                      type: "text_chunk",
+                      content: buffer.trim() + " ",
+                    }
+                    buffer = ""
+                  }
+                }
+              }
+            }
+          }
+
+          if (part.functionCall) {
+            const toolCall = {
+              toolName: part.functionCall.name,
+              args: part.functionCall.args,
+            }
+
+            return {
+              type: "tool_call",
+              toolName: toolCall.toolName,
+              args: toolCall.args,
+            }
+
+            console.log(`[v0] Executing tool: ${toolCall.toolName}`)
+            const toolResult = await executeFunctionCall(toolCall, walletAddress)
+
+            return {
+              type: "tool_result",
+              toolName: toolCall.toolName,
+              result: toolResult,
+            }
+
+            toolResultsToAdd.push({
+              role: "user",
+              parts: [
+                {
+                  text: `Tool ${toolCall.toolName} executed with result: ${JSON.stringify(toolResult)}`,
+                },
+              ],
+            })
+
+            toolCalls.push(toolCall)
+          }
+        }
+      }
+    }
+
+    // Send any remaining buffer
+    if (buffer.trim()) {
+      return {
+        type: "text_chunk",
+        content: buffer.trim(),
+      }
+    }
+
+    return {
+      type: "done",
     }
   }
-  ;(async () => {
-    try {
-      const { messages, walletAddress } = await request.json()
 
-      console.log("[v0] Received request with", messages?.length, "messages")
-
-      if (!messages || !Array.isArray(messages)) {
-        await sendMessage({ error: "Messages array is required" })
-        await writer.close()
-        return
-      }
-
-      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-
-      if (!apiKey || apiKey.trim() === "" || apiKey === "your-api-key-here") {
-        await sendMessage({
-          error:
-            "AI service not configured. Please set a valid GOOGLE_GENERATIVE_AI_API_KEY in environment variables. Get your free API key at https://ai.google.dev/",
-        })
-        await writer.close()
-        return
-      }
-
-      console.log("[v0] Initializing Gemini AI...")
-
-      const genAI = new GoogleGenerativeAI(apiKey)
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        tools,
-        systemInstruction: systemPrompt,
-      })
-
-      const history = messages.slice(0, -1).map((msg: any) => ({
-        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
-        parts: [{ text: msg.content }],
-      }))
-
-      const filteredHistory: any[] = []
-      for (const msg of history) {
-        if (filteredHistory.length === 0 || filteredHistory[filteredHistory.length - 1].role !== msg.role) {
-          filteredHistory.push(msg)
-        }
-      }
-
-      if (filteredHistory.length > 0 && filteredHistory[0].role !== "user") {
-        filteredHistory.shift()
-      }
-
-      const chat = model.startChat({
-        history: filteredHistory,
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.7,
-        },
-      })
-
-      const lastMessage = messages[messages.length - 1]
-
-      let result = await retryWithBackoff(() => chat.sendMessage(lastMessage.content))
-      let response = result.response
-      let loopCount = 0
-      const maxLoops = 5
-
-      while (response.candidates?.[0]?.content?.parts?.[0]?.functionCall && loopCount < maxLoops) {
-        loopCount++
-        const functionCall = response.candidates[0].content.parts[0].functionCall
-
-        console.log(`[v0] Function call detected (iteration ${loopCount}):`, functionCall.name)
-
-        await sendMessage({
-          type: "tool_call",
-          toolName: functionCall.name,
-          args: functionCall.args,
-        })
-
-        const functionResult = await executeFunctionCall(functionCall, walletAddress)
-
-        console.log(`[v0] Function result:`, functionResult)
-
-        await sendMessage({
-          type: "tool_result",
-          toolName: functionCall.name,
-          result: functionResult,
-        })
-
-        result = await retryWithBackoff(() =>
-          chat.sendMessage([
-            {
-              functionResponse: {
-                name: functionCall.name,
-                response: functionResult,
-              },
-            },
-          ]),
-        )
-
-        response = result.response
-      }
-
-      let responseText = ""
+  // Convert async generator to ReadableStream
+  return new ReadableStream({
+    async start(controller) {
       try {
-        responseText = await response.text()
-      } catch (error) {
-        console.error("[v0] Error getting response text:", error)
-        responseText = "I've processed your request. Please check the transaction details."
-      }
-
-      if (responseText && responseText.trim()) {
-        const words = responseText.split(" ")
-        for (const word of words) {
-          await sendMessage({
-            type: "text_chunk",
-            content: word + " ",
-          })
-          await new Promise((resolve) => setTimeout(resolve, 20))
+        for await (const chunk of processStream()) {
+          const data = `data: ${JSON.stringify(chunk)}\n\n`
+          controller.enqueue(new TextEncoder().encode(data))
         }
-      } else {
-        await sendMessage({
-          type: "text_chunk",
-          content: "Request processed successfully. ",
-        })
+        controller.close()
+      } catch (error) {
+        console.error("[v0] Stream error:", error)
+        controller.error(error)
       }
-
-      await sendMessage({ type: "done" })
-      await writer.close()
-    } catch (error: any) {
-      console.error("[v0] Agent error:", error)
-      console.error("[v0] Error details:", {
-        message: error?.message,
-        status: error?.status,
-        code: error?.code,
-        stack: error?.stack?.split("\n").slice(0, 3).join("\n"),
-      })
-
-      let errorMessage = "Failed to process request"
-
-      if (
-        error?.message?.includes("API_KEY_INVALID") ||
-        error?.message?.includes("API key not valid") ||
-        error?.code === "PERMISSION_DENIED"
-      ) {
-        errorMessage =
-          "Invalid Google AI API key. Please check your GOOGLE_GENERATIVE_AI_API_KEY configuration. Get a free key at https://ai.google.dev/"
-      } else if (
-        error?.status === 429 ||
-        error?.code === "RESOURCE_EXHAUSTED" ||
-        (error?.message?.toLowerCase().includes("quota") && error?.message?.toLowerCase().includes("exceed")) ||
-        error?.message?.toLowerCase().includes("too many requests")
-      ) {
-        errorMessage =
-          "Google AI API quota exceeded or rate limit hit. Please wait a few minutes and try again. If this persists, consider upgrading your API plan at https://ai.google.dev/pricing"
-      } else if (error?.message?.toLowerCase().includes("rate limit")) {
-        errorMessage = "Rate limit exceeded. Please wait a moment before sending another message."
-      } else if (
-        error?.message?.toLowerCase().includes("model") &&
-        error?.message?.toLowerCase().includes("not found")
-      ) {
-        errorMessage =
-          "The AI model is temporarily unavailable. Please try again in a moment or check your API key permissions."
-      } else if (error?.message?.toLowerCase().includes("safety") || error?.code === "SAFETY") {
-        errorMessage = "Your message was blocked by safety filters. Please rephrase your request."
-      } else if (error?.message) {
-        errorMessage = `AI request failed: ${error.message}`
-      }
-
-      await sendMessage({ error: errorMessage })
-      await writer.close()
-    }
-  })()
-
-  return new Response(stream.readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
     },
   })
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const userMessage = body.message || ""
+    const walletAddress = body.walletAddress || ""
+
+    if (!userMessage.trim()) {
+      return new Response(
+        JSON.stringify({
+          error: "Empty message",
+        }),
+        { status: 400 },
+      )
+    }
+
+    const client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+    const model = client.getGenerativeModel({
+      model: "gemini-2.0-flash-exp",
+      tools,
+    })
+
+    const stream = await model.generateContentStream({
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 1024,
+      },
+    })
+
+    const encoder = new TextEncoder()
+    const lastMessageId = Date.now().toString()
+    let toolCallBuffer = ""
+    let textBuffer = ""
+    let isFirstChunk = true
+
+    return new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream.stream) {
+            if (event.candidates && event.candidates[0]?.content?.parts) {
+              for (const part of event.candidates[0].content.parts) {
+                if (part.text) {
+                  textBuffer += part.text
+
+                  // Only send complete sentences or when buffer is large
+                  const lastDotIndex = textBuffer.lastIndexOf(".")
+                  const lastNewlineIndex = textBuffer.lastIndexOf("\n")
+                  const lastSentenceIndex = Math.max(lastDotIndex, lastNewlineIndex)
+
+                  if (lastSentenceIndex > 0) {
+                    const toSend = textBuffer.substring(0, lastSentenceIndex + 1)
+                    textBuffer = textBuffer.substring(lastSentenceIndex + 1)
+
+                    controller.enqueue(
+                      encoder.encode(
+                        JSON.stringify({
+                          type: "text",
+                          content: toSend,
+                          messageId: lastMessageId,
+                        }) + "\n",
+                      ),
+                    )
+                    isFirstChunk = false
+                  }
+                }
+
+                if (part.functionCall) {
+                  // Send any remaining text first
+                  if (textBuffer.trim()) {
+                    controller.enqueue(
+                      encoder.encode(
+                        JSON.stringify({
+                          type: "text",
+                          content: textBuffer,
+                          messageId: lastMessageId,
+                        }) + "\n",
+                      ),
+                    )
+                    textBuffer = ""
+                  }
+
+                  toolCallBuffer += JSON.stringify(part.functionCall)
+
+                  controller.enqueue(
+                    encoder.encode(
+                      JSON.stringify({
+                        type: "tool_call",
+                        toolName: part.functionCall.name,
+                        args: part.functionCall.args,
+                        messageId: lastMessageId,
+                      }) + "\n",
+                    ),
+                  )
+
+                  // Execute the tool
+                  const toolResult = await executeFunctionCall(part.functionCall, walletAddress)
+
+                  controller.enqueue(
+                    encoder.encode(
+                      JSON.stringify({
+                        type: "tool_result",
+                        toolName: part.functionCall.name,
+                        result: toolResult,
+                        messageId: lastMessageId,
+                      }) + "\n",
+                    ),
+                  )
+
+                  toolCallBuffer = ""
+                }
+              }
+            }
+
+            if (event.candidates?.[0]?.finishReason === "STOP") {
+              if (textBuffer.trim()) {
+                controller.enqueue(
+                  encoder.encode(
+                    JSON.stringify({
+                      type: "text",
+                      content: textBuffer,
+                      messageId: lastMessageId,
+                    }) + "\n",
+                  ),
+                )
+              }
+            }
+          }
+
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                type: "end",
+                messageId: lastMessageId,
+              }) + "\n",
+            ),
+          )
+        } catch (error) {
+          console.error("[v0] Stream error:", error)
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                type: "error",
+                error: error instanceof Error ? error.message : "Unknown error",
+              }) + "\n",
+            ),
+          )
+        } finally {
+          controller.close()
+        }
+      },
+    })
+  } catch (error) {
+    console.error("[v0] Agent route error:", error)
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      { status: 500 },
+    )
+  }
 }
