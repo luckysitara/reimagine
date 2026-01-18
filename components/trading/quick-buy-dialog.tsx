@@ -69,12 +69,17 @@ export function QuickBuyDialog({ isOpen, onClose, token }: QuickBuyDialogProps) 
   const [quote, setQuote] = useState<any>(null)
   const [quoteError, setQuoteError] = useState<string | null>(null)
 
+  // Validate token has required fields
+  if (!token || !token.address) {
+    return null
+  }
+
   useEffect(() => {
-    if (isOpen && settings.amount && settings.amount > 0) {
+    if (isOpen && settings.amount && settings.amount > 0 && token?.address) {
       setInputAmount(settings.amount.toString())
       fetchQuoteWithAmount(settings.amount.toString())
     }
-  }, [isOpen, settings.amount])
+  }, [isOpen, settings.amount, token?.address])
 
   const fetchQuoteWithAmount = async (amount: string) => {
     if (!amount || Number.parseFloat(amount) <= 0 || !publicKey) {

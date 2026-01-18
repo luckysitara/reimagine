@@ -54,14 +54,66 @@ export async function POST(request: Request) {
 
     console.log("[v0] Secure RPC proxy request:", body.method)
 
-    // Forward request to Helius with API key (secure server-side only)
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    })
+    // Try Helius RPC first with retry logic, fallback to public RPC
+    const publicRpc = "https://api.mainnet-beta.solana.com"
+    let response: Response | null = null
+    let lastError: Error | null = null
+
+    // Attempt Helius RPC with retry
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch(rpcUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15000), // 15 second timeout per attempt
+        })
+        break // Success, exit retry loop
+      } catch (fetchError) {
+        lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError))
+        console.error(`[v0] RPC proxy attempt ${attempt + 1} failed:`, lastError.message)
+
+        // If this is the last attempt, try public RPC as fallback
+        if (attempt === 1) {
+          console.log("[v0] Helius RPC failed, attempting public Solana RPC as fallback")
+          try {
+            response = await fetch(publicRpc, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+              signal: AbortSignal.timeout(10000),
+            })
+            console.log("[v0] Public RPC fallback succeeded")
+            break
+          } catch (publicError) {
+            console.error("[v0] Public RPC fallback also failed:", publicError)
+            return NextResponse.json(
+              {
+                error: "Both primary and fallback RPC endpoints are unavailable",
+                details: "Please check your network connection or try again later",
+              },
+              { status: 503 },
+            )
+          }
+        }
+
+        // Wait a bit before retrying
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+      }
+    }
+
+    if (!response) {
+      return NextResponse.json(
+        { error: "Failed to connect to RPC endpoint" },
+        { status: 503 },
+      )
+    }
 
     if (!response.ok) {
       const error = await response.text()

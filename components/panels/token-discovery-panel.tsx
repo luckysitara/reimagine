@@ -88,26 +88,19 @@ export function TokenDiscoveryPanel() {
       return
     }
 
-    // Use saved settings and execute the swap immediately
+    // Validate settings
+    if (!settings.amount || settings.amount <= 0) {
+      toast.error("Please configure quick buy amount in settings")
+      return
+    }
+
+    if (!settings.paymentToken) {
+      toast.error("Please select a payment token in settings")
+      return
+    }
+
+    // Use saved settings and open the dialog to execute
     try {
-      const paymentTokenSymbol = settings.paymentToken as "SOL" | "USDC" | "USDT"
-      const paymentTokenMap: Record<string, string> = {
-        SOL: "So11111111111111111111111111111111111111112",
-        USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenEsw",
-      }
-
-      const paymentTokenAddress = paymentTokenMap[paymentTokenSymbol]
-      if (!paymentTokenAddress) {
-        toast.error("Invalid payment token configured")
-        return
-      }
-
-      // Instead of opening a dialog, show a quick buy toast notification
-      // and prepare for instant execution
-      toast.loading(`Preparing to buy ${token.symbol} with ${settings.amount} ${paymentTokenSymbol}...`)
-
-      // Store the quick buy intent for instant execution
       setSelectedToken(token)
       setShowQuickBuy(true)
     } catch (error) {
@@ -249,14 +242,15 @@ export function TokenDiscoveryPanel() {
                   </div>
 
                   {/* Token Rows */}
-                  {tokens.map((token) => {
+                  {tokens.map((token, idx) => {
                     const priceChange24h = token.stats24h?.priceChange || 0
                     const volume6h = token.stats24h?.buyVolume || 0
                     const traders = token.stats24h?.traderCount || 0
+                    const uniqueKey = token.address || `token-${idx}`
 
                     return (
                       <div
-                        key={token.address}
+                        key={uniqueKey}
                         className="flex items-center gap-3 px-4 py-3 border-b border-border/50 hover:bg-background/50 transition-colors"
                       >
                         {/* Token Logo */}

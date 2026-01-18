@@ -10,34 +10,56 @@ export class SecureRPCClient {
   private proxyEndpoint = "/api/solana/rpc"
 
   /**
-   * Make a JSON-RPC request to Solana via our secure proxy
+   * Make a JSON-RPC request to Solana via our secure proxy with retry logic
    */
-  async request(method: string, params: any[] = []): Promise<any> {
-    const response = await fetch(this.proxyEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method,
-        params,
-      }),
-    })
+  async request(method: string, params: any[] = [], retries = 2): Promise<any> {
+    let lastError: Error | null = null
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || "RPC request failed")
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const response = await fetch(this.proxyEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: Date.now(),
+            method,
+            params,
+          }),
+          signal: AbortSignal.timeout(20000), // 20 second timeout
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || `HTTP ${response.status}: RPC request failed`)
+        }
+
+        const data = await response.json()
+
+        if (data.error) {
+          throw new Error(data.error.message || "RPC error")
+        }
+
+        return data.result
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        console.warn(`[v0] RPC request attempt ${attempt + 1}/${retries} failed:`, lastError.message)
+
+        // Don't retry on 400/401/403 errors (client/auth errors)
+        if (lastError.message.includes("HTTP 400") || lastError.message.includes("HTTP 401") || lastError.message.includes("HTTP 403")) {
+          throw lastError
+        }
+
+        // Wait before retry
+        if (attempt < retries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
+        }
+      }
     }
 
-    const data = await response.json()
-
-    if (data.error) {
-      throw new Error(data.error.message || "RPC error")
-    }
-
-    return data.result
+    throw lastError || new Error("RPC request failed after retries")
   }
 
   /**
