@@ -12,7 +12,7 @@ export class SecureRPCClient {
   /**
    * Make a JSON-RPC request to Solana via our secure proxy with retry logic
    */
-  async request(method: string, params: any[] = [], retries = 2): Promise<any> {
+  async request(method: string, params: any[] = [], retries = 3): Promise<any> {
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -28,11 +28,25 @@ export class SecureRPCClient {
             method,
             params,
           }),
-          signal: AbortSignal.timeout(20000), // 20 second timeout
+          signal: AbortSignal.timeout(50000), // 50 second timeout to match server timeout
         })
 
+        // Handle 503 Service Unavailable - retry with backoff
+        if (response.status === 503) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000) // Exponential backoff, max 5s
+          console.warn(`[v0] RPC unavailable (503), retrying in ${waitTime}ms (attempt ${attempt + 1}/${retries})`)
+          
+          if (attempt < retries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, waitTime))
+            continue
+          }
+          
+          lastError = new Error("RPC endpoint temporarily unavailable")
+          continue
+        }
+
         if (!response.ok) {
-          const error = await response.json()
+          const error = await response.json().catch(() => ({ error: response.statusText }))
           throw new Error(error.error || `HTTP ${response.status}: RPC request failed`)
         }
 
@@ -52,10 +66,14 @@ export class SecureRPCClient {
           throw lastError
         }
 
-        // Wait before retry
-        if (attempt < retries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
+        // Don't retry if this was the last attempt
+        if (attempt >= retries - 1) {
+          break
         }
+
+        // Wait before retry with exponential backoff
+        const waitTime = Math.min(500 * Math.pow(2, attempt), 5000)
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
       }
     }
 

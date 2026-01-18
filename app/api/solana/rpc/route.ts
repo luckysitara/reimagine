@@ -62,78 +62,107 @@ export async function POST(request: Request) {
     // Attempt Helius RPC with retry
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
+        console.log(`[v0] Attempting Helius RPC (attempt ${attempt + 1}/2)`)
         response = await fetch(rpcUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15000), // 15 second timeout per attempt
+          signal: AbortSignal.timeout(40000), // 40 second timeout to allow for slow responses
         })
-        break // Success, exit retry loop
+
+        // If response is OK, we're done - exit both the try and the outer loop
+        if (response.ok) {
+          console.log("[v0] Helius RPC succeeded")
+          break
+        }
+
+        // If we got a non-OK response, log it but try again on first attempt
+        const errorText = await response.text()
+        console.warn(`[v0] Helius RPC returned HTTP ${response.status}:`, errorText.substring(0, 200))
+
+        // On 401/403, don't retry - auth error
+        if (response.status === 401 || response.status === 403) {
+          lastError = new Error(`Authentication error: ${response.status}`)
+          break
+        }
+
+        // On first attempt, wait and retry
+        if (attempt === 0) {
+          console.log("[v0] Retrying Helius RPC...")
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          continue
+        }
+
+        // On second attempt, fall through to public RPC
+        lastError = new Error(`HTTP ${response.status}`)
       } catch (fetchError) {
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError))
-        console.error(`[v0] RPC proxy attempt ${attempt + 1} failed:`, lastError.message)
+        console.warn(`[v0] Helius RPC attempt ${attempt + 1} network error:`, lastError.message)
 
-        // If this is the last attempt, try public RPC as fallback
-        if (attempt === 1) {
-          console.log("[v0] Helius RPC failed, attempting public Solana RPC as fallback")
-          try {
-            response = await fetch(publicRpc, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(body),
-              signal: AbortSignal.timeout(10000),
-            })
-            console.log("[v0] Public RPC fallback succeeded")
-            break
-          } catch (publicError) {
-            console.error("[v0] Public RPC fallback also failed:", publicError)
-            return NextResponse.json(
-              {
-                error: "Both primary and fallback RPC endpoints are unavailable",
-                details: "Please check your network connection or try again later",
-              },
-              { status: 503 },
-            )
-          }
-        }
-
-        // Wait a bit before retrying
+        // If this was the first attempt, try again
         if (attempt === 0) {
           await new Promise((resolve) => setTimeout(resolve, 500))
+          continue
         }
+
+        // Second attempt failed, will try public RPC
+      }
+    }
+
+    // If Helius failed completely, try public RPC as fallback
+    if (!response || !response.ok) {
+      console.log("[v0] Falling back to public Solana RPC...")
+      try {
+        response = await fetch(publicRpc, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(40000),
+        })
+        console.log("[v0] Public RPC fallback responded with status", response.status)
+      } catch (publicError) {
+        console.error("[v0] Public RPC fallback also failed:", publicError)
+        return NextResponse.json(
+          {
+            error: "All RPC endpoints are unavailable",
+            details: "Please try again in a few moments",
+          },
+          { status: 503 },
+        )
       }
     }
 
     if (!response) {
       return NextResponse.json(
-        { error: "Failed to connect to RPC endpoint" },
+        { error: "Failed to get RPC response" },
         { status: 503 },
       )
     }
 
+    // Handle non-OK responses
     if (!response.ok) {
-      const error = await response.text()
-      console.error("[v0] Helius RPC error:", response.status, error)
+      const errorText = await response.text()
+      console.error("[v0] RPC endpoint error:", response.status, errorText)
 
       if (response.status === 429) {
         return NextResponse.json(
-          { error: "Rate limit exceeded. Please try again in a moment or upgrade your Helius plan." },
+          { error: "Rate limit exceeded. Please try again in a moment." },
           { status: 429 },
         )
       }
 
       if (response.status === 401 || response.status === 403) {
         return NextResponse.json(
-          { error: "Invalid Helius API key. Please check your HELIUS_RPC_URL configuration." },
+          { error: "Invalid RPC API key. Please check your HELIUS_RPC_URL configuration." },
           { status: 401 },
         )
       }
 
-      return NextResponse.json({ error: `RPC request failed: ${error}` }, { status: response.status })
+      return NextResponse.json({ error: `RPC request failed: ${errorText}` }, { status: response.status })
     }
 
     const data = await response.json()

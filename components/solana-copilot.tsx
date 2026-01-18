@@ -352,6 +352,14 @@ export function SolanaCopilot() {
             continue
           }
 
+          if (response.status === 503) {
+            const waitTime = Math.min(1000 * Math.pow(2, retryCount), 5000)
+            console.warn(`[v0] Agent unavailable (503), retrying in ${waitTime}ms...`)
+            await new Promise((resolve) => setTimeout(resolve, waitTime))
+            retryCount++
+            continue
+          }
+
           try {
             const errorData = await response.json()
             throw new Error(errorData.error || `Server error: ${response.status}`)

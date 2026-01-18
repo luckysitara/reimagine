@@ -22,8 +22,7 @@ export function useSolanaBalance() {
         return lamports / LAMPORTS_PER_SOL
       } catch (err) {
         console.error("[v0] Failed to fetch balance:", err)
-        // Return 0 instead of throwing to prevent UI breaks
-        // The error will still be captured by SWR's error state
+        // Continue returning undefined to trigger SWR retry behavior
         throw err
       }
     },
@@ -31,10 +30,12 @@ export function useSolanaBalance() {
       refreshInterval: 30000, // Refresh every 30 seconds
       revalidateOnFocus: true,
       shouldRetryOnError: true,
-      errorRetryCount: 3,
-      errorRetryInterval: 5000, // Wait 5s between retries
+      errorRetryCount: 5, // Increased retries
+      errorRetryInterval: 2000, // 2s between retries (faster than before)
+      dedupingInterval: 2000, // Dedupe requests within 2s
+      focusThrottleInterval: 5000, // Throttle focus refetch
       onError: (err) => {
-        console.error("[v0] Balance fetch error:", err)
+        console.warn("[v0] Balance fetch error (will retry):", err.message)
       },
     },
   )
