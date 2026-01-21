@@ -1,7 +1,82 @@
-// Service Worker for handling push notifications
+// Service Worker - notifications + minimal PWA caching
+const CACHE_NAME = "reimagine-app-shell-v1"
+const APP_SHELL = [
+  "/",
+  "/favicon.ico",
+  "/icon-light-32x32.png",
+  "/icon-dark-32x32.png",
+  "/icons/icon-192.svg",
+  "/icons/icon-512.svg",
+  // Note: Next.js assets live under _next/static and are hashed. If you want to precache
+  // build-time assets reliably, consider a Workbox build step instead.
+]
 
+// Install: cache app shell
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(APP_SHELL).catch((err) => {
+        // don't fail the install if a single resource 404s; still try to continue
+        console.warn("[SW] cache.addAll failed:", err)
+      })
+    }),
+  )
+  self.skipWaiting()
+})
+
+// Activate: clean old caches
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME)
+          .map((k) => caches.delete(k)),
+      ),
+    ).then(() => self.clients.claim()),
+  )
+})
+
+// Fetch: cache-first for app shell, network-first for others (APIs)
+self.addEventListener("fetch", (event) => {
+  const request = event.request
+
+  // Only handle GET requests
+  if (request.method !== "GET") return
+
+  const url = new URL(request.url)
+
+  // Treat navigation requests as app-shell
+  if (request.mode === "navigate" || APP_SHELL.some((p) => request.url.includes(p.replace("*", "")))) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request)
+          .then((res) => {
+            // Cache a copy for next time
+            const resClone = res.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, resClone))
+            return res
+          })
+          .catch(() => caches.match("/")) // fallback to index if offline
+      }),
+    )
+    return
+  }
+
+  // Default: network-first, fallback to cache
+  event.respondWith(
+    fetch(request)
+      .then((res) => {
+        return res
+      })
+      .catch(() => caches.match(request)),
+  )
+})
+
+// Message -> show notification (keeps your existing API)
 self.addEventListener("message", (event) => {
-  if (event.data.type === "SHOW_NOTIFICATION") {
+  if (event.data?.type === "SHOW_NOTIFICATION") {
     const { payload } = event.data
     self.registration.showNotification(payload.title, {
       body: payload.body,
@@ -14,13 +89,12 @@ self.addEventListener("message", (event) => {
   }
 })
 
+// Notification click handling (preserves existing behavior)
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
-
-  const data = event.notification.data
+  const data = event.notification.data || {}
 
   if (data.type === "order" && data.orderId) {
-    // Navigate to limit orders or trading history
     event.waitUntil(
       clients.matchAll({ type: "window" }).then((clientList) => {
         for (const client of clientList) {
@@ -33,10 +107,10 @@ self.addEventListener("notificationclick", (event) => {
         }
       }),
     )
+    return
   }
 
   if (data.type === "price" && data.token) {
-    // Navigate to token details
     event.waitUntil(
       clients.matchAll({ type: "window" }).then((clientList) => {
         for (const client of clientList) {
@@ -49,18 +123,24 @@ self.addEventListener("notificationclick", (event) => {
         }
       }),
     )
+    return
   }
 })
 
+// Push -> show notification (preserves existing behavior)
 self.addEventListener("push", (event) => {
   if (event.data) {
-    const data = event.data.json()
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon,
-      badge: data.badge,
-      tag: data.tag,
-      data: data.data,
-    })
+    try {
+      const data = event.data.json()
+      self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: data.icon,
+        badge: data.badge,
+        tag: data.tag,
+        data: data.data,
+      })
+    } catch (e) {
+      console.error("[SW] push event parse failed", e)
+    }
   }
 })
