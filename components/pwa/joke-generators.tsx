@@ -1,3 +1,5 @@
+
+
 "use client"
 
 import React, { useState } from "react"
@@ -20,8 +22,6 @@ export default function JokeGenerator() {
     setError(null)
     setJoke(null)
 
-    // Primary: Official Joke API (setup/punchline)
-    // Fallback: icanhazdadjoke (single-line)
     try {
       const res = await fetch("https://official-joke-api.appspot.com/jokes/random", {
         headers: { Accept: "application/json" },
@@ -45,7 +45,7 @@ export default function JokeGenerator() {
         return
       }
 
-      throw new Error(`Joke APIs unavailable: ${res.status} / ${res2?.status}`)
+      throw new Error(`Joke APIs unavailable: ${res.status}`)
     } catch (err: any) {
       console.error("Joke fetch failed", err)
       setError("Couldn't fetch a joke right now. Try again.")
@@ -55,16 +55,14 @@ export default function JokeGenerator() {
 
   return (
     <div className="flex items-center gap-2">
-      <div>
-        <button
-          onClick={fetchJoke}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          type="button"
-        >
-          {loading ? "Loading..." : "Tell me a joke"}
-        </button>
-      </div>
+      <button
+        onClick={fetchJoke}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+        type="button"
+      >
+        {loading ? "Loading..." : "Tell me a joke"}
+      </button>
 
       {joke && (
         <div className="max-w-xs rounded-md bg-slate-800/90 px-3 py-2 text-sm text-white shadow-md">
@@ -83,3 +81,4 @@ export default function JokeGenerator() {
     </div>
   )
 }
+
