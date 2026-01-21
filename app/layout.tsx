@@ -5,6 +5,9 @@ import { Analytics } from "@vercel/analytics/next"
 import { SolanaWalletProvider } from "@/context/wallet-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
+import PWARegister from "@/components/pwa/pwa-register"
+import InstallButton from "@/components/pwa/install-button"
+import JokeGenerator from "@/components/pwa/joke-generator"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -55,11 +58,22 @@ export default function RootLayout({
             `,
           }}
         />
+        {/* PWA manifest and theming */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0066cc" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body className={`font-sans antialiased`}>
         <SolanaWalletProvider>
           {children}
           <Toaster richColors position="top-right" />
+
+          {/* Fixed controls (Install button + Joke generator) */}
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
+            <PWARegister />
+            <InstallButton />
+            <JokeGenerator />
+          </div>
         </SolanaWalletProvider>
         <Analytics />
       </body>
