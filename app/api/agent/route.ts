@@ -886,9 +886,9 @@ async function executeAgentWithStream(
   const stream = response.stream
   const toolResultsToAdd: Array<{ role: string; parts: Array<{ text: string }> }> = []
 
-  const processStream = async () => {
-    const encoder = new TextEncoder()
+  const processStream = async function* () {
     let buffer = ""
+    const encoder = new TextEncoder()
 
     let fullText = ""
     let contentIndex = 0
@@ -923,7 +923,7 @@ async function executeAgentWithStream(
                       type: "text_chunk",
                       content: buffer.trim() + " ",
                     })}\n\n`
-                    yield data
+                    console.log(data)
                     buffer = ""
                   }
                 }
@@ -942,7 +942,7 @@ async function executeAgentWithStream(
               toolName: toolCall.toolName,
               args: toolCall.args,
             })}\n\n`
-            yield data
+            console.log(data)
 
             console.log(`[v0] Executing tool: ${toolCall.toolName}`)
             const toolResult = await executeFunctionCall(toolCall, walletAddress)
@@ -952,7 +952,7 @@ async function executeAgentWithStream(
               toolName: toolCall.toolName,
               result: toolResult,
             })}\n\n`
-            yield toolResultData
+            console.log(toolResultData)
 
             toolResultsToAdd.push({
               role: "user",
@@ -975,22 +975,20 @@ async function executeAgentWithStream(
         type: "text_chunk",
         content: buffer.trim(),
       })}\n\n`
-      yield data
+      console.log(data)
     }
 
     const data = `data: ${JSON.stringify({
       type: "done",
     })}\n\n`
-    yield data
+    console.log(data)
   }
 
   // Convert async generator to ReadableStream
   return new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of processStream()) {
-          controller.enqueue(new TextEncoder().encode(chunk))
-        }
+        await processStream()
         controller.close()
       } catch (error) {
         console.error("[v0] Stream error:", error)
