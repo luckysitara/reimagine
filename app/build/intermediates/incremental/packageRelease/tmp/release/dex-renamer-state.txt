@@ -1,0 +1,4 @@
+#Thu Jan 22 07:44:45 PST 2026
+base.0=/home/rootkit/reimagine/app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex
+renamed.0=classes.dex
+path.0=classes.dex
