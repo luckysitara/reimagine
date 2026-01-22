@@ -16,7 +16,7 @@ The application uses a **secure proxy pattern** to protect API keys:
 
 Add these environment variables in your Vercel project dashboard or v0 Vars section:
 
-```bash
+\`\`\`bash
 # REQUIRED: Helius RPC URL (Server-side only - secure)
 HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_API_KEY
 
@@ -28,7 +28,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key
 
 # OPTIONAL: Jupiter API Key (recommended for better rate limits)
 JUPITER_API_KEY=your_jupiter_api_key
-```
+\`\`\`
 
 ### Important Notes
 
@@ -118,7 +118,7 @@ JUPITER_API_KEY=your_jupiter_api_key
 
 For local development, create a `.env.local` file:
 
-```bash
+\`\`\`bash
 # Copy from .env.example
 cp .env.example .env.local
 
@@ -126,7 +126,7 @@ cp .env.example .env.local
 HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 GOOGLE_GENERATIVE_AI_API_KEY=your_key
 JUPITER_API_KEY=your_key
-```
+\`\`\`
 
 **Never commit `.env.local` to git** - it's already in `.gitignore`.
 

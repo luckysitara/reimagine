@@ -7,7 +7,7 @@ This guide helps developers understand the codebase structure and how to add new
 ## 📁 Project Structure
 
 ### Web App (Next.js)
-```
+\`\`\`
 ├── app/
 │   ├── api/                      # API routes
 │   │   ├── agent/               # AI agent endpoint
@@ -51,10 +51,10 @@ This guide helps developers understand the codebase structure and how to add new
 │   └── assets/
 │
 └── hooks/                       # React hooks
-```
+\`\`\`
 
 ### Mobile App (React Native)
-```
+\`\`\`
 seeker_mobile/
 ├── src/
 │   ├── screens/                 # Screen components
@@ -73,7 +73,7 @@ seeker_mobile/
 ├── app.json                     # React Native config
 ├── tsconfig.json                # TypeScript config
 └── package.json                 # Dependencies
-```
+\`\`\`
 
 ---
 
@@ -83,7 +83,7 @@ seeker_mobile/
 
 **Example: Adding a new API integration**
 
-```typescript
+\`\`\`typescript
 // lib/services/my-service.ts
 
 export interface MyServiceResult {
@@ -114,11 +114,11 @@ export async function myServiceFunction(params: Record<string, any>): Promise<My
     }
   }
 }
-```
+\`\`\`
 
 ### Step 2: Create the API Route
 
-```typescript
+\`\`\`typescript
 // app/api/my-feature/route.ts
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -140,11 +140,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-```
+\`\`\`
 
 ### Step 3: Create the UI Component
 
-```typescript
+\`\`\`typescript
 // components/my-feature-panel.tsx
 
 "use client"
@@ -189,11 +189,11 @@ export function MyFeaturePanel() {
     </Card>
   )
 }
-```
+\`\`\`
 
 ### Step 4: Add AI Agent Tool (Optional)
 
-```typescript
+\`\`\`typescript
 // In app/api/agent/route.ts
 
 // Add to tools array:
@@ -218,11 +218,11 @@ case "my_tool": {
   const result = await myServiceFunction(args)
   return result
 }
-```
+\`\`\`
 
 ### Step 5: Add Mobile Support
 
-```typescript
+\`\`\`typescript
 // seeker_mobile/src/screens/MyFeatureScreen.tsx
 
 import React, { useState } from "react"
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: "#1a1a1a" },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold", marginBottom: 16 },
 })
-```
+\`\`\`
 
 ---
 
@@ -286,13 +286,13 @@ const styles = StyleSheet.create({
 
 1. Import `notifyTradingRecommendation` from `lib/services/notifications`
 2. Call after successful operation:
-   ```typescript
+   \`\`\`typescript
    await notifyTradingRecommendation(
      "Feature Complete",
      "Your operation finished successfully",
      { type: "feature_name" }
    )
-   ```
+   \`\`\`
 3. Users can control notifications in settings
 
 ---
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
 
 ### Web App
 
-```bash
+\`\`\`bash
 # Run development server
 npm run dev
 
@@ -310,11 +310,11 @@ npm run type-check
 
 # Lint
 npm run lint
-```
+\`\`\`
 
 ### Mobile App
 
-```bash
+\`\`\`bash
 # Install dependencies
 cd seeker_mobile
 npm install
@@ -324,15 +324,15 @@ yarn android
 
 # Build APK
 yarn android:build
-```
+\`\`\`
 
 ### Testing Notifications
 
-```typescript
+\`\`\`typescript
 // Test in browser console
 await Notification.requestPermission()
 new Notification("Test", { body: "This is a test" })
-```
+\`\`\`
 
 ---
 

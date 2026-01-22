@@ -998,26 +998,41 @@ async function executeAgentWithStream(
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const userMessage = body.message || ""
+    const messages = body.messages || []
     const walletAddress = body.walletAddress || ""
 
-    if (!userMessage.trim()) {
+    if (!messages || messages.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "Empty message",
+          error: "No messages provided",
         }),
         { status: 400 },
       )
     }
 
-    const client = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+    const apiKey = process.env.GOOGLE_AI_KEY
+    
+    if (!apiKey) {
+      console.error("[v0] Missing GOOGLE_AI_KEY environment variable")
+      return new Response(
+        JSON.stringify({
+          error: "AI service not configured. Please add GOOGLE_AI_KEY to your environment variables.",
+        }),
+        { status: 500 },
+      )
+    }
+
+    const client = new GoogleGenerativeAI(apiKey)
     const model = client.getGenerativeModel({
       model: "gemini-2.0-flash-exp",
       tools,
     })
 
     const stream = await model.generateContentStream({
-      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      contents: messages.map((msg: any) => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      })),
       systemInstruction: systemPrompt,
       generationConfig: {
         temperature: 0.7,

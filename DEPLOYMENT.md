@@ -25,7 +25,7 @@ This guide covers deploying Reimagine to production on Vercel.
 
 ### Option 2: Manual Deployment
 
-```bash
+\`\`\`bash
 # Install Vercel CLI
 npm install -g vercel
 
@@ -36,7 +36,7 @@ vercel login
 vercel
 
 # Follow the prompts
-```
+\`\`\`
 
 ---
 
@@ -59,7 +59,7 @@ After importing the project, add these environment variables in Vercel:
 
 ### 2. Via Vercel CLI
 
-```bash
+\`\`\`bash
 # Add production environment variables
 vercel env add NEXT_PUBLIC_HELIUS_RPC_URL production
 # Paste your Helius RPC URL when prompted
@@ -69,7 +69,7 @@ vercel env add GOOGLE_GENERATIVE_AI_API_KEY production
 
 # Redeploy after adding variables
 vercel --prod
-```
+\`\`\`
 
 ---
 
@@ -106,11 +106,11 @@ vercel --prod
 
 1. **Enable Edge Runtime** (Already configured in `next.config.mjs`)
 2. **Configure Caching**
-   ```javascript
+   \`\`\`javascript
    // Already configured in API routes
    export const runtime = 'edge'
    export const revalidate = 60 // Cache for 60 seconds
-   ```
+   \`\`\`
 
 3. **Monitor Performance**
    - Use Vercel Analytics (already integrated)
@@ -141,18 +141,18 @@ vercel --prod
 Add the following records to your DNS provider:
 
 **For root domain (example.com):**
-```
+\`\`\`
 Type: A
 Name: @
 Value: 76.76.21.21
-```
+\`\`\`
 
 **For www subdomain:**
-```
+\`\`\`
 Type: CNAME
 Name: www
 Value: cname.vercel-dns.com
-```
+\`\`\`
 
 ### 3. SSL Certificate
 
@@ -171,13 +171,13 @@ Vercel automatically deploys when you push to GitHub:
 
 ### Manual Deployment
 
-```bash
+\`\`\`bash
 # Deploy to production
 vercel --prod
 
 # Deploy to preview
 vercel
-```
+\`\`\`
 
 ---
 
@@ -185,27 +185,27 @@ vercel
 
 ### View Logs
 
-```bash
+\`\`\`bash
 # View real-time logs
 vercel logs
 
 # View function logs
 vercel logs [deployment-url]
-```
+\`\`\`
 
 ### Debug Common Issues
 
 #### Issue: AI Copilot not responding
 
 **Solution:**
-```bash
+\`\`\`bash
 # Check if Gemini API key is set
 vercel env ls
 
 # If missing, add it
 vercel env add GOOGLE_GENERATIVE_AI_API_KEY production
 vercel --prod  # Redeploy
-```
+\`\`\`
 
 #### Issue: Wallet not connecting
 
@@ -232,16 +232,16 @@ Already integrated! View in **Analytics** → **Speed Insights**
 ### 2. Optimize Images
 
 Images are already optimized via Next.js Image component:
-```typescript
+\`\`\`typescript
 <Image src="/logo.png" alt="Logo" width={32} height={32} />
-```
+\`\`\`
 
 ### 3. Use Edge Functions
 
 API routes are already configured for Edge Runtime:
-```typescript
+\`\`\`typescript
 export const runtime = 'edge'
-```
+\`\`\`
 
 ### 4. Enable Compression
 
@@ -292,13 +292,13 @@ Vercel automatically compresses responses (Brotli/Gzip)
 
 ### Via CLI
 
-```bash
+\`\`\`bash
 # List deployments
 vercel ls
 
 # Promote specific deployment
 vercel promote [deployment-url]
-```
+\`\`\`
 
 ---
 

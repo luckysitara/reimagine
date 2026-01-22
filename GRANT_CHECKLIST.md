@@ -26,13 +26,13 @@
 **Status**: COMPLETE - Full SMS Integration
 
 #### Mobile Wallet Adapter (MWA) Implementation
-```
+\`\`\`
 ✅ Wallet Connection: SecureAuthorizationResult with MWA 2.1.9
 ✅ Transaction Signing: Mobile Wallet Adapter integration
 ✅ Account Authorization: Persistent session caching with AsyncStorage
 ✅ Transaction Building: Native Solana web3.js
 ✅ RPC Requests: via @solana/web3.js
-```
+\`\`\`
 
 **Files**:
 - `seeker_mobile/src/context/WalletContext.tsx` - Complete MWA integration

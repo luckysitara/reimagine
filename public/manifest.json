@@ -1,0 +1,24 @@
+{
+  "name": "Reimagine - AI-Powered DeFi Trading",
+  "short_name": "Reimagine",
+  "description": "AI-powered DeFi trading on Solana — trade, stake, and manage assets with intelligent automation.",
+  "start_url": "/",
+  "display": "standalone",
+  "scope": "/",
+  "background_color": "#0b1220",
+  "theme_color": "#0066cc",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
