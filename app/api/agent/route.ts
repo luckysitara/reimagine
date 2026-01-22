@@ -7,6 +7,7 @@ import { analyzeTokenNews } from "@/lib/tools/analyze-token-news"
 import { getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
 import { getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
 import { notifyTradingRecommendation } from "@/lib/services/notifications"
+import { ReadableStream } from "stream/web"
 
 const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. Provide clear, concise responses.
 
@@ -918,10 +919,11 @@ async function executeAgentWithStream(
 
                   // Send chunks every sentence or when buffer gets large
                   if (buffer.length > 100 || line.endsWith(".")) {
-                    return {
+                    const data = `data: ${JSON.stringify({
                       type: "text_chunk",
                       content: buffer.trim() + " ",
-                    }
+                    })}\n\n`
+                    yield data
                     buffer = ""
                   }
                 }
@@ -935,20 +937,22 @@ async function executeAgentWithStream(
               args: part.functionCall.args,
             }
 
-            return {
+            const data = `data: ${JSON.stringify({
               type: "tool_call",
               toolName: toolCall.toolName,
               args: toolCall.args,
-            }
+            })}\n\n`
+            yield data
 
             console.log(`[v0] Executing tool: ${toolCall.toolName}`)
             const toolResult = await executeFunctionCall(toolCall, walletAddress)
 
-            return {
+            const toolResultData = `data: ${JSON.stringify({
               type: "tool_result",
               toolName: toolCall.toolName,
               result: toolResult,
-            }
+            })}\n\n`
+            yield toolResultData
 
             toolResultsToAdd.push({
               role: "user",
@@ -967,15 +971,17 @@ async function executeAgentWithStream(
 
     // Send any remaining buffer
     if (buffer.trim()) {
-      return {
+      const data = `data: ${JSON.stringify({
         type: "text_chunk",
         content: buffer.trim(),
-      }
+      })}\n\n`
+      yield data
     }
 
-    return {
+    const data = `data: ${JSON.stringify({
       type: "done",
-    }
+    })}\n\n`
+    yield data
   }
 
   // Convert async generator to ReadableStream
@@ -983,8 +989,7 @@ async function executeAgentWithStream(
     async start(controller) {
       try {
         for await (const chunk of processStream()) {
-          const data = `data: ${JSON.stringify(chunk)}\n\n`
-          controller.enqueue(new TextEncoder().encode(data))
+          controller.enqueue(new TextEncoder().encode(chunk))
         }
         controller.close()
       } catch (error) {
@@ -1033,7 +1038,7 @@ export async function POST(request: Request) {
       parts: [{ text: msg.content }],
     }))
 
-    const stream = await model.generateContentStream({
+    const response = await model.generateContentStream({
       contents,
       systemInstruction: systemPrompt,
       generationConfig: {
@@ -1050,10 +1055,10 @@ export async function POST(request: Request) {
     let textBuffer = ""
     let isFirstChunk = true
 
-    return new ReadableStream({
+    const resultStream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const event of stream.stream) {
+          for await (const event of response.stream) {
             if (event.candidates && event.candidates[0]?.content?.parts) {
               for (const part of event.candidates[0].content.parts) {
                 if (part.text) {
@@ -1091,7 +1096,6 @@ export async function POST(request: Request) {
                         })}\n\n`,
                       ),
                     )
-                    textBuffer = ""
                   }
 
                   toolCallBuffer += JSON.stringify(part.functionCall)
@@ -1157,6 +1161,14 @@ export async function POST(request: Request) {
         } finally {
           controller.close()
         }
+      },
+    })
+
+    return new Response(resultStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
       },
     })
   } catch (error) {
