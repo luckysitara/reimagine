@@ -3,7 +3,7 @@
   "host": "reimagine-beta.vercel.app",
   "name": "Reimagine - AI-Powered DeFi Trading",
   "launcherName": "Reimagine",
-  "display": "fullscreen",
+  "display": "standalone",
   "themeColor": "#7CC0FF",
   "themeColorDark": "#000000",
   "navigationColor": "#000000",
@@ -38,9 +38,6 @@
   "minSdkVersion": 21,
   "orientation": "any",
   "fingerprints": [
-    {
-      "value": "65:50:F7:64:DE:72:67:22:E0:4B:36:A6:A8:A8:CE:50:43:84:F6:D2:BC:F5:A6:49:73:19:6B:66:D8:D2:52:1D"
-    },
     {
       "value": "65:50:F7:64:DE:72:67:22:E0:4B:36:A6:A8:A8:CE:50:43:84:F6:D2:BC:F5:A6:49:73:19:6B:66:D8:D2:52:1D"
     }
