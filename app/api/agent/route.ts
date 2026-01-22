@@ -1001,38 +1001,40 @@ export async function POST(request: Request) {
     const messages = body.messages || []
     const walletAddress = body.walletAddress || ""
 
-    if (!messages || messages.length === 0) {
+    // Get the last user message from the messages array
+    const userMessage = messages
+      .filter((msg: any) => msg.role === "user")
+      .slice(-1)[0]?.content || ""
+
+    if (!userMessage.trim()) {
       return new Response(
         JSON.stringify({
-          error: "No messages provided",
+          error: "Empty message",
         }),
         { status: 400 },
       )
     }
 
-    const apiKey = process.env.GOOGLE_AI_KEY
-    
-    if (!apiKey) {
-      console.error("[v0] Missing GOOGLE_AI_KEY environment variable")
-      return new Response(
-        JSON.stringify({
-          error: "AI service not configured. Please add GOOGLE_AI_KEY to your environment variables.",
-        }),
-        { status: 500 },
-      )
+    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY
+
+    if (!googleApiKey) {
+      throw new Error("GOOGLE_API_KEY environment variable is not set")
     }
 
-    const client = new GoogleGenerativeAI(apiKey)
+    const client = new GoogleGenerativeAI(googleApiKey)
     const model = client.getGenerativeModel({
       model: "gemini-2.0-flash-exp",
       tools,
     })
 
+    // Convert message history to Gemini format
+    const contents = messages.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }))
+
     const stream = await model.generateContentStream({
-      contents: messages.map((msg: any) => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }],
-      })),
+      contents,
       systemInstruction: systemPrompt,
       generationConfig: {
         temperature: 0.7,
@@ -1068,11 +1070,10 @@ export async function POST(request: Request) {
 
                     controller.enqueue(
                       encoder.encode(
-                        JSON.stringify({
-                          type: "text",
+                        `data: ${JSON.stringify({
+                          type: "text_chunk",
                           content: toSend,
-                          messageId: lastMessageId,
-                        }) + "\n",
+                        })}\n\n`,
                       ),
                     )
                     isFirstChunk = false
@@ -1084,11 +1085,10 @@ export async function POST(request: Request) {
                   if (textBuffer.trim()) {
                     controller.enqueue(
                       encoder.encode(
-                        JSON.stringify({
-                          type: "text",
+                        `data: ${JSON.stringify({
+                          type: "text_chunk",
                           content: textBuffer,
-                          messageId: lastMessageId,
-                        }) + "\n",
+                        })}\n\n`,
                       ),
                     )
                     textBuffer = ""
@@ -1098,12 +1098,11 @@ export async function POST(request: Request) {
 
                   controller.enqueue(
                     encoder.encode(
-                      JSON.stringify({
+                      `data: ${JSON.stringify({
                         type: "tool_call",
                         toolName: part.functionCall.name,
                         args: part.functionCall.args,
-                        messageId: lastMessageId,
-                      }) + "\n",
+                      })}\n\n`,
                     ),
                   )
 
@@ -1112,12 +1111,11 @@ export async function POST(request: Request) {
 
                   controller.enqueue(
                     encoder.encode(
-                      JSON.stringify({
+                      `data: ${JSON.stringify({
                         type: "tool_result",
                         toolName: part.functionCall.name,
                         result: toolResult,
-                        messageId: lastMessageId,
-                      }) + "\n",
+                      })}\n\n`,
                     ),
                   )
 
@@ -1130,11 +1128,10 @@ export async function POST(request: Request) {
               if (textBuffer.trim()) {
                 controller.enqueue(
                   encoder.encode(
-                    JSON.stringify({
-                      type: "text",
+                    `data: ${JSON.stringify({
+                      type: "text_chunk",
                       content: textBuffer,
-                      messageId: lastMessageId,
-                    }) + "\n",
+                    })}\n\n`,
                   ),
                 )
               }
@@ -1143,20 +1140,18 @@ export async function POST(request: Request) {
 
           controller.enqueue(
             encoder.encode(
-              JSON.stringify({
-                type: "end",
-                messageId: lastMessageId,
-              }) + "\n",
+              `data: ${JSON.stringify({
+                type: "done",
+              })}\n\n`,
             ),
           )
         } catch (error) {
           console.error("[v0] Stream error:", error)
           controller.enqueue(
             encoder.encode(
-              JSON.stringify({
-                type: "error",
+              `data: ${JSON.stringify({
                 error: error instanceof Error ? error.message : "Unknown error",
-              }) + "\n",
+              })}\n\n`,
             ),
           )
         } finally {
