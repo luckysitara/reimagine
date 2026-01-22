@@ -49,7 +49,7 @@
 
 ### How Reimagine Works
 
-```
+\`\`\`
 User: "Swap 100 USDC for SOL"
       ↓
 AI (Gemini 2.0): Parses intent, checks market conditions
@@ -61,7 +61,7 @@ Execution: Builds and simulates transaction
 Confirmation: User signs with wallet
       ↓
 Result: Instant settlement on Solana
-```
+\`\`\`
 
 ### Core Value Proposition
 

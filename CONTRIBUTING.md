@@ -32,7 +32,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 #### Setup Development Environment
 
-```bash
+\`\`\`bash
 # Fork and clone the repository
 git clone https://github.com/yourusername/reimagine.git
 cd reimagine
@@ -45,14 +45,14 @@ cp .env.example .env.local
 
 # Start development server
 npm run dev
-```
+\`\`\`
 
 #### Making Changes
 
 1. **Create a branch** from `main`:
-   ```bash
+   \`\`\`bash
    git checkout -b feature/your-feature-name
-   ```
+   \`\`\`
 
 2. **Make your changes**:
    - Write clean, documented code
@@ -60,16 +60,16 @@ npm run dev
    - Add tests if applicable
 
 3. **Test your changes**:
-   ```bash
+   \`\`\`bash
    npm run build
    npm run lint
-   ```
+   \`\`\`
 
 4. **Commit your changes**:
-   ```bash
+   \`\`\`bash
    git add .
    git commit -m "feat: add new feature"
-   ```
+   \`\`\`
    
    Use conventional commit messages:
    - `feat:` - New feature
@@ -81,9 +81,9 @@ npm run dev
    - `chore:` - Maintenance tasks
 
 5. **Push to your fork**:
-   ```bash
+   \`\`\`bash
    git push origin feature/your-feature-name
-   ```
+   \`\`\`
 
 6. **Create a Pull Request**:
    - Go to the original repository
@@ -108,7 +108,7 @@ npm run dev
 - Add types for all function parameters and returns
 - Avoid `any` type unless absolutely necessary
 
-```typescript
+\`\`\`typescript
 // Good
 function formatPrice(price: number): string {
   return `$${price.toFixed(2)}`
@@ -118,7 +118,7 @@ function formatPrice(price: number): string {
 function formatPrice(price: any) {
   return `$${price.toFixed(2)}`
 }
-```
+\`\`\`
 
 ### React Components
 
@@ -126,7 +126,7 @@ function formatPrice(price: any) {
 - Use descriptive component names
 - Add JSDoc comments for complex components
 
-```typescript
+\`\`\`typescript
 /**
  * Token search dialog component
  * @param onSelect - Callback when token is selected
@@ -135,7 +135,7 @@ function formatPrice(price: any) {
 export function TokenSearchDialog({ onSelect, tokens }: Props) {
   // ...
 }
-```
+\`\`\`
 
 ### Styling
 
@@ -143,17 +143,17 @@ export function TokenSearchDialog({ onSelect, tokens }: Props) {
 - Follow existing design patterns
 - Use semantic design tokens from `globals.css`
 
-```typescript
+\`\`\`typescript
 // Good
 <div className="flex items-center gap-2 rounded-lg bg-background p-4">
 
 // Bad
 <div style={{ display: 'flex', padding: '16px' }}>
-```
+\`\`\`
 
 ## Project Structure
 
-```
+\`\`\`
 reimagine/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
@@ -171,26 +171,26 @@ reimagine/
 │   ├── tools/           # AI agent tools
 │   └── utils/           # Helper functions
 └── public/              # Static assets
-```
+\`\`\`
 
 ## Testing
 
 ### Unit Tests
 
-```bash
+\`\`\`bash
 # Run tests
 npm test
 
 # Run with coverage
 npm test -- --coverage
-```
+\`\`\`
 
 ### E2E Tests (Coming Soon)
 
-```bash
+\`\`\`bash
 # Run Playwright tests
 npm run test:e2e
-```
+\`\`\`
 
 ## Documentation
 

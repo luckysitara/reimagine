@@ -55,7 +55,7 @@ Source: https://solanamobile.com/grants
 
 **Mobile Wallet Adapter (MWA) Integration**
 
-```typescript
+\`\`\`typescript
 // ✅ MWA Version: 2.1.9
 // ✅ Full integration in WalletContext.tsx
 
@@ -65,48 +65,48 @@ Implementation Details:
 - Transaction signing via mobile wallet app
 - Account deauthorization support
 - Error handling for wallet rejections
-```
+\`\`\`
 
 **Key SMS Features Implemented**
 
 #### A. Mobile Wallet Adapter Connection
-```typescript
+\`\`\`typescript
 ✅ Wallet Selection: User chooses wallet (Saga, etc.)
 ✅ Auth Request: Requests "sign_and_send_transactions" capability
 ✅ Session Storage: Cached in AsyncStorage with TTL
 ✅ Reconnection: Auto-reconnect on app restart
 ✅ Cleanup: Proper deauth when wallet disconnected
-```
+\`\`\`
 
 **Code Location**: `/seeker_mobile/src/context/WalletContext.tsx`
 
 #### B. Seed Vault Integration
-```typescript
+\`\`\`typescript
 ✅ Leverages Seeker's secure enclave
 ✅ Private keys never exposed to app
 ✅ All transaction signing happens in wallet app
 ✅ Non-custodial design - Reimagine never holds keys
-```
+\`\`\`
 
 #### C. RPC Communication
-```typescript
+\`\`\`typescript
 ✅ @solana/web3.js for transaction building
 ✅ Secure RPC client via Helius
 ✅ Transaction simulation before broadcast
 ✅ Confirmation polling with proper timeout
-```
+\`\`\`
 
 **Code Location**: `/seeker_mobile/src/services/rpc-client.ts`
 
 #### D. Transaction Signing Flow
-```
+\`\`\`
 1. User initiates swap in mobile app
 2. Reimagine builds transaction locally
 3. Signs transaction in mobile wallet app (separate process)
 4. Returns signed transaction to Reimagine
 5. Reimagine broadcasts to network
 6. User sees confirmation in trading UI
-```
+\`\`\`
 
 **Files**:
 - `/seeker_mobile/src/context/WalletContext.tsx` - MWA setup
@@ -278,7 +278,7 @@ Implementation Details:
 
 **Budget Allocation**
 
-```
+\`\`\`
 ┌─────────────────────────────────────────┐
 │  Reimagine - Grant Budget ($50,000)    │
 ├─────────────────────────────────────────┤
@@ -291,7 +291,7 @@ Implementation Details:
 │  Infrastructure       $ 2,000 (4%)      │
 │                                         │
 └─────────────────────────────────────────┘
-```
+\`\`\`
 
 **Detailed Breakdown**
 
@@ -389,11 +389,11 @@ Implementation Details:
 
 **Timeline for Fund Utilization**
 
-```
+\`\`\`
 Month 1 (Jan 2026): Development setup, optimization $10K
 Month 2 (Feb 2026): Active development, audits    $20K
 Month 3 (Mar 2026): Testing, deployment, marketing $15K
-```
+\`\`\`
 
 All funds allocated by Q1 2026 for Phase 2 completion.
 
@@ -407,7 +407,7 @@ All funds allocated by Q1 2026 for Phase 2 completion.
 
 **Financial Projections**
 
-```
+\`\`\`
 Year 1 (2026):
 - Revenue from platform fees: $50K - $150K
 - Marketing reinvestment: 40%
@@ -419,7 +419,7 @@ Year 2 (2027):
 - Product lines: 5 (core + 4 advanced)
 - Team size: 10-15 people
 - Market position: Top 5 mobile DeFi apps
-```
+\`\`\`
 
 **Files**:
 - `/PITCH_DECK.md` - Full financial model
@@ -452,7 +452,7 @@ Year 2 (2027):
 **Code**: `/seeker_mobile/src/services/seeker-detector.ts`
 
 **Usage Example**:
-```typescript
+\`\`\`typescript
 import { detectSeekerCapabilities } from '@reimagine/seeker-detector';
 
 const capabilities = detectSeekerCapabilities();
@@ -460,7 +460,7 @@ if (capabilities.battery < 20) {
   // Reduce animations, lower frame rate
   setFrameRate(30); // instead of 60
 }
-```
+\`\`\`
 
 **Community Value**:
 - Saves weeks of development for other mobile dApps
@@ -503,7 +503,7 @@ if (capabilities.battery < 20) {
 **Code**: `/lib/tools/` directory structure
 
 **Example Tool**:
-```typescript
+\`\`\`typescript
 export const swapTool = defineTool({
   name: 'swap',
   description: 'Swap tokens on Solana',
@@ -516,7 +516,7 @@ export const swapTool = defineTool({
     // Tool implementation
   },
 });
-```
+\`\`\`
 
 **Community Value**:
 - Enable community developers to contribute tools
