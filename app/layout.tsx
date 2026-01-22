@@ -7,7 +7,6 @@ import { Toaster } from "sonner"
 import "./globals.css"
 import PWARegister from "@/components/pwa/pwa-register"
 import InstallButton from "@/components/pwa/install-button"
-import JokeGenerator from "@/components/pwa/joke-generator"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -68,11 +67,12 @@ export default function RootLayout({
           {children}
           <Toaster richColors position="top-right" />
 
-          {/* Fixed controls (Install button + Joke generator) */}
+          {/* PWA register (no visible UI) */}
+          <PWARegister />
+
+          {/* Fixed controls: Install button only (joke removed) */}
           <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
-            <PWARegister />
             <InstallButton />
-            <JokeGenerator />
           </div>
         </SolanaWalletProvider>
         <Analytics />
