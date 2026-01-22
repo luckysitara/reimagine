@@ -12,7 +12,7 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#0B1220",
   "enableNotifications": true,
-  "startUrl": "/manifest.json",
+  "startUrl": "/",
   "iconUrl": "https://reimagine-beta.vercel.app/icons/icon-512.svg",
   "maskableIconUrl": "https://reimagine-beta.vercel.app/icons/icon-512.svg",
   "monochromeIconUrl": "https://reimagine-beta.vercel.app/icons/icon-512.svg",
@@ -21,8 +21,8 @@
     "path": "/home/rootkit/reimagine/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "2",
-  "appVersionCode": 2,
+  "appVersionName": "1",
+  "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://reimagine-beta.vercel.app/manifest.json",
@@ -40,9 +40,6 @@
   "fingerprints": [
     {
       "value": "65:50:F7:64:DE:72:67:22:E0:4B:36:A6:A8:A8:CE:50:43:84:F6:D2:BC:F5:A6:49:73:19:6B:66:D8:D2:52:1D"
-    },
-    {
-      "value": "65:50:F7:64:DE:72:67:22:E0:4B:36:A6:A8:A8:CE:50:43:84:F6:D2:BC:F5:A6:49:73:19:6B:66:D8:D2:52:1D"
     }
   ],
   "additionalTrustedOrigins": [],
@@ -51,5 +48,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "2"
+  "appVersion": "1"
 }
