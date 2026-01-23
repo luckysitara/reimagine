@@ -18,11 +18,12 @@ export function useSolanaBalance() {
       if (!publicKey) return 0
 
       try {
-        const lamports = await connection.getBalance(publicKey)
-        return lamports / LAMPORTS_PER_SOL
+        const balanceLamports = await connection.getBalance(publicKey)
+        const balanceSOL = balanceLamports / LAMPORTS_PER_SOL
+        console.log("[v0] Balance fetched via Solana connection:", balanceSOL, "SOL from", balanceLamports, "lamports")
+        return balanceSOL
       } catch (err) {
         console.error("[v0] Failed to fetch balance:", err)
-        // Continue returning undefined to trigger SWR retry behavior
         throw err
       }
     },

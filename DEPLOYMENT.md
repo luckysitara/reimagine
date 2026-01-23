@@ -7,7 +7,9 @@ This guide covers deploying Reimagine to production on Vercel.
 - GitHub account
 - Vercel account (free tier works)
 - Helius API key ([Get one here](https://dev.helius.xyz/))
-- Google Gemini API key ([Get one here](https://ai.google.dev/))
+- AI Provider API key (at least one):
+  - **Primary**: Google Gemini API key ([Get one here](https://ai.google.dev/))
+  - **Fallback**: Grok/XAI API key ([Get one here](https://console.x.ai/))
 
 ---
 
@@ -52,8 +54,9 @@ After importing the project, add these environment variables in Vercel:
 
 | Variable Name | Value | Environment |
 |--------------|-------|-------------|
-| `NEXT_PUBLIC_HELIUS_RPC_URL` | `https://mainnet.helius-rpc.com/?api-key=YOUR_KEY` | Production, Preview, Development |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | `your_google_api_key` | Production, Preview, Development |
+| `HELIUS_RPC_URL` | `https://mainnet.helius-rpc.com/?api-key=YOUR_KEY` | Production, Preview, Development |
+| `GOOGLE_API_KEY` | `your_google_gemini_api_key` | Production, Preview, Development |
+| `XAI_API_KEY` | `your_xai_grok_api_key` | Production, Preview, Development |
 | `NEXT_PUBLIC_SOLANA_NETWORK` | `mainnet-beta` | Production |
 | `NEXT_PUBLIC_SOLANA_NETWORK` | `devnet` | Preview, Development |
 
@@ -61,11 +64,14 @@ After importing the project, add these environment variables in Vercel:
 
 \`\`\`bash
 # Add production environment variables
-vercel env add NEXT_PUBLIC_HELIUS_RPC_URL production
+vercel env add HELIUS_RPC_URL production
 # Paste your Helius RPC URL when prompted
 
-vercel env add GOOGLE_GENERATIVE_AI_API_KEY production
-# Paste your Google API key when prompted
+vercel env add GOOGLE_API_KEY production
+# Paste your Google Gemini API key when prompted
+
+vercel env add XAI_API_KEY production
+# Paste your XAI/Grok API key when prompted (optional, used as fallback)
 
 # Redeploy after adding variables
 vercel --prod
@@ -199,18 +205,21 @@ vercel logs [deployment-url]
 
 **Solution:**
 \`\`\`bash
-# Check if Gemini API key is set
+# Check if AI provider keys are set
 vercel env ls
 
-# If missing, add it
-vercel env add GOOGLE_GENERATIVE_AI_API_KEY production
+# If missing, add Google API key (primary)
+vercel env add GOOGLE_API_KEY production
+# Or add Grok/XAI API key (fallback)
+vercel env add XAI_API_KEY production
+
 vercel --prod  # Redeploy
 \`\`\`
 
 #### Issue: Wallet not connecting
 
 **Solution:**
-- Ensure `NEXT_PUBLIC_HELIUS_RPC_URL` is set
+- Ensure `HELIUS_RPC_URL` is set (server-side, not NEXT_PUBLIC_)
 - Check browser console for errors
 - Verify wallet extension is installed
 

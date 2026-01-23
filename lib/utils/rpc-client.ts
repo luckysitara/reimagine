@@ -86,12 +86,27 @@ export class SecureRPCClient {
   async getBalance(address: string): Promise<number> {
     try {
       const result = await this.request("getBalance", [address])
-      // Ensure we return a number, not a string or undefined
-      const balance = typeof result === "string" ? Number.parseInt(result, 10) : Number(result)
+      
+      // Handle different response formats from RPC endpoints
+      let balance: number
+      
+      if (typeof result === "object" && result !== null && "value" in result) {
+        // Handle object response with value property (some RPC endpoints return this)
+        balance = typeof result.value === "string" ? Number.parseInt(result.value, 10) : Number(result.value)
+      } else if (typeof result === "string") {
+        // Handle string response
+        balance = Number.parseInt(result, 10)
+      } else {
+        // Handle direct number response
+        balance = Number(result)
+      }
+      
       if (Number.isNaN(balance)) {
         console.warn("[v0] Invalid balance returned:", result, "for address:", address)
         return 0
       }
+      
+      console.log("[v0] RPC balance for", address.slice(0, 8) + "...:", balance, "lamports")
       return balance
     } catch (error) {
       console.error("[v0] Error fetching balance for", address, ":", error)

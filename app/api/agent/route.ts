@@ -8,28 +8,29 @@ import { getOpenOrders, cancelLimitOrder } from "@/lib/services/jupiter-trigger"
 import { getDCAAccounts, closeDCAOrder } from "@/lib/services/jupiter-recurring"
 import { notifyTradingRecommendation } from "@/lib/services/notifications"
 import { ReadableStream } from "stream/web"
+import { TextEncoder } from "util"
 
-const systemPrompt = `You are an AI assistant for Reimagine, a DeFi trading platform on Solana. Provide clear, concise responses.
+const systemPrompt = `You are an AI DeFi assistant for Reimagine on Solana. Be concise and helpful.
 
-Capabilities:
-- Execute single/multi token swaps via Jupiter DEX
-- Create and manage limit orders and DCA (dollar-cost averaging)
-- Create new SPL tokens with custom metadata
-- View and cancel active orders
-- Portfolio analysis with diversification scoring
-- Real-time token pricing and news analysis with sentiment
-- Autopilot mode for proactive monitoring
+CAPABILITIES:
+- Single/multi token swaps (Jupiter)
+- Limit orders and DCA
+- New SPL token creation
+- Portfolio analysis with scoring
+- Real-time token price and news sentiment
+- Order management and autopilot
 
-Key instructions:
-1. Be concise - avoid repeating yourself
-2. For swaps: extract input/output tokens and amounts
-3. For orders: ask for token, amount, and target price/frequency
-4. For news: fetch and summarize sentiment, key news, and risks
-5. Always verify wallet connection before operations
-6. Format large numbers with K/M suffix
-7. Warn about price impact >1%
+INSTRUCTIONS:
+1. Use tools directly - don't ask for confirmation unless critical
+2. For swaps: confirm input/output tokens and amount
+3. For orders: ask price/frequency if not specified
+4. For analysis: use token analysis tools automatically
+5. Format numbers: 1K for thousands, 1M for millions
+6. Always warn if price impact >1%
+7. Analyze with technical + sentiment indicators when asked
+8. NEVER ask for private keys
 
-Security first - never ask for private keys.`
+CONTEXT: User wallet is connected.`
 
 const tools = [
   {
@@ -867,10 +868,19 @@ async function executeAgentWithStream(
   messages: any[],
   walletAddress: string | undefined,
 ): Promise<ReadableStream<Uint8Array> | null> {
-  const client = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "")
-  const model = client.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
+  const googleApiKey = process.env.GOOGLE_API_KEY || ""
+  const grokApiKey = process.env.XAI_API_KEY || ""
 
-  const response = await model.generateContentStream({
+  if (!googleApiKey && !grokApiKey) {
+    console.error("[v0] No AI providers configured. Set GOOGLE_API_KEY or XAI_API_KEY.")
+    throw new Error("AI service not configured")
+  }
+
+  // Use Google by default, fallback to Grok
+  const client = googleApiKey ? new GoogleGenerativeAI(googleApiKey) : null
+  const model = client?.getGenerativeModel({ model: "gemini-2.0-flash-exp" })
+
+  const response = await model?.generateContentStream({
     systemInstruction: systemPrompt,
     tools,
     contents: messages.map((msg: any) => ({
@@ -883,7 +893,7 @@ async function executeAgentWithStream(
     })),
   })
 
-  const stream = response.stream
+  const stream = response?.stream
   const toolResultsToAdd: Array<{ role: string; parts: Array<{ text: string }> }> = []
 
   const processStream = async function* () {
@@ -896,10 +906,10 @@ async function executeAgentWithStream(
     const toolCalls: any[] = []
 
     while (hasMore) {
-      const value = await stream.next()
-      hasMore = !value.done
+      const value = await stream?.next()
+      hasMore = !value?.done
 
-      if (value.value) {
+      if (value?.value) {
         const response = value.value
 
         for (const part of response.candidates[0].content.parts) {
@@ -1018,73 +1028,271 @@ export async function POST(request: Request) {
       )
     }
 
-    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY
+    const googleApiKey = process.env.GOOGLE_API_KEY || ""
+    const grokApiKey = process.env.XAI_API_KEY || ""
 
-    if (!googleApiKey) {
-      throw new Error("GOOGLE_API_KEY environment variable is not set")
+    if (!googleApiKey && !grokApiKey) {
+      console.error("[v0] No AI providers configured. Set GOOGLE_API_KEY (Google/default) or XAI_API_KEY (Grok/fallback).")
+      return new Response(
+        JSON.stringify({
+          error: "AI service is not configured. Please set GOOGLE_API_KEY or XAI_API_KEY.",
+        }),
+        { status: 503 },
+      )
     }
-
-    const client = new GoogleGenerativeAI(googleApiKey)
-    const model = client.getGenerativeModel({
-      model: "gemini-2.0-flash-exp",
-      tools,
-    })
-
-    // Convert message history to Gemini format
-    const contents = messages.map((msg: any) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }))
-
-    const response = await model.generateContentStream({
-      contents,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 1024,
-      },
-    })
 
     const encoder = new TextEncoder()
     const lastMessageId = Date.now().toString()
-    let toolCallBuffer = ""
-    let textBuffer = ""
-    let isFirstChunk = true
 
+    // Function to try Google API with automatic Grok fallback
+    async function tryGoogleWithFallback() {
+      if (!googleApiKey) {
+        if (!grokApiKey) {
+          throw new Error("No AI providers configured")
+        }
+        console.log("[v0] Google API not configured. Starting with Grok fallback.")
+        return { provider: "grok", useGrok: true }
+      }
+
+      try {
+        console.log("[v0] Attempting Google Gemini API (primary)")
+        const client = new GoogleGenerativeAI(googleApiKey)
+        const model = client.getGenerativeModel({
+          model: "gemini-2.0-flash-exp",
+          tools,
+        })
+        return { provider: "google", useGrok: false, client, model }
+      } catch (googleError: any) {
+        // Check if error is rate limit, auth, or quota
+        const errorMessage = googleError?.message?.toLowerCase() || ""
+        const isRateLimitOrQuota =
+          errorMessage.includes("rate") ||
+          errorMessage.includes("quota") ||
+          errorMessage.includes("resource exhausted") ||
+          errorMessage.includes("429") ||
+          errorMessage.includes("unauthorized") ||
+          errorMessage.includes("401") ||
+          errorMessage.includes("403")
+
+        if (isRateLimitOrQuota && grokApiKey) {
+          console.warn(
+            "[v0] Google API rate limited or quota exceeded:",
+            googleError.message,
+          )
+          console.log("[v0] Falling back to Grok AI...")
+          return { provider: "grok", useGrok: true }
+        }
+
+        // If Grok available, try fallback for other errors too
+        if (grokApiKey && !isRateLimitOrQuota) {
+          console.warn("[v0] Google API error:", googleError.message)
+          console.log("[v0] Falling back to Grok AI...")
+          return { provider: "grok", useGrok: true }
+        }
+
+        // No fallback available
+        throw googleError
+      }
+    }
+
+    // Create response stream
     const resultStream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const event of response.stream) {
-            if (event.candidates && event.candidates[0]?.content?.parts) {
-              for (const part of event.candidates[0].content.parts) {
-                if (part.text) {
-                  textBuffer += part.text
+          // Try Google with automatic fallback to Grok
+          const providerConfig = await tryGoogleWithFallback()
+          const { useGrok, client, model } = providerConfig
 
-                  // Only send complete sentences or when buffer is large
-                  const lastDotIndex = textBuffer.lastIndexOf(".")
-                  const lastNewlineIndex = textBuffer.lastIndexOf("\n")
-                  const lastSentenceIndex = Math.max(lastDotIndex, lastNewlineIndex)
+          if (useGrok) {
+            // Use Grok AI (automatic fallback) with streaming via direct API
+            try {
+              console.log("[v0] Using Grok AI for streaming response")
+              
+              const response = await fetch("https://api.x.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${grokApiKey}`,
+                },
+                body: JSON.stringify({
+                  model: "grok-4-latest",
+                  messages: [
+                    { role: "system", content: systemPrompt },
+                    ...messages.map((msg: any) => ({
+                      role: msg.role,
+                      content: msg.content,
+                    })),
+                  ],
+                  temperature: 0.7,
+                  top_p: 0.95,
+                  max_tokens: 1024,
+                  stream: true,
+                }),
+              })
 
-                  if (lastSentenceIndex > 0) {
-                    const toSend = textBuffer.substring(0, lastSentenceIndex + 1)
-                    textBuffer = textBuffer.substring(lastSentenceIndex + 1)
+              if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(`Grok API error: ${response.status} - ${JSON.stringify(errorData)}`)
+              }
 
-                    controller.enqueue(
-                      encoder.encode(
-                        `data: ${JSON.stringify({
-                          type: "text_chunk",
-                          content: toSend,
-                        })}\n\n`,
-                      ),
-                    )
-                    isFirstChunk = false
+              console.log("[v0] Grok response streaming to client")
+              const reader = response.body?.getReader()
+              const decoder = new TextDecoder()
+
+              if (reader) {
+                let buffer = ""
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+
+                  buffer += decoder.decode(value, { stream: true })
+                  const lines = buffer.split("\n")
+                  buffer = lines.pop() || ""
+
+                  for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                      const data = line.slice(6)
+                      if (data === "[DONE]") continue
+
+                      try {
+                        const parsed = JSON.parse(data)
+                        const content = parsed.choices?.[0]?.delta?.content
+                        if (content) {
+                          controller.enqueue(
+                            encoder.encode(
+                              `data: ${JSON.stringify({
+                                type: "text_chunk",
+                                content: content,
+                              })}\n\n`,
+                            ),
+                          )
+                        }
+                      } catch (e) {
+                        // Skip parsing errors for individual chunks
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Signal completion
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: "done",
+                  })}\n\n`,
+                ),
+              )
+              controller.close()
+            } catch (grokError: any) {
+              console.error("[v0] Grok API error:", grokError)
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: "error",
+                    error: "Both Google and Grok AI failed. Please try again later.",
+                  })}\n\n`,
+                ),
+              )
+              controller.close()
+              return
+            }
+          } else {
+            // Use Google Gemini (primary)
+            try {
+              console.log("[v0] Using Google Gemini for streaming response")
+              // Convert message history to Gemini format
+              const contents = messages.map((msg: any) => ({
+                role: msg.role === "user" ? "user" : "model",
+                parts: [{ text: msg.content }],
+              }))
+
+              const response = await model?.generateContentStream({
+                contents,
+                systemInstruction: systemPrompt,
+                generationConfig: {
+                  temperature: 0.7,
+                  topP: 0.95,
+                  topK: 40,
+                  maxOutputTokens: 1024,
+                },
+              })
+
+              let toolCallBuffer = ""
+              let textBuffer = ""
+              let isFirstChunk = true
+
+              for await (const event of response?.stream || []) {
+                if (event.candidates && event.candidates[0]?.content?.parts) {
+                  for (const part of event.candidates[0].content.parts) {
+                    if (part.text) {
+                      textBuffer += part.text
+
+                      // Only send complete sentences or when buffer is large
+                      const lastDotIndex = textBuffer.lastIndexOf(".")
+                      const lastNewlineIndex = textBuffer.lastIndexOf("\n")
+                      const lastSentenceIndex = Math.max(lastDotIndex, lastNewlineIndex)
+
+                      if (lastSentenceIndex > 0) {
+                        const toSend = textBuffer.substring(0, lastSentenceIndex + 1)
+                        textBuffer = textBuffer.substring(lastSentenceIndex + 1)
+
+                        controller.enqueue(
+                          encoder.encode(
+                            `data: ${JSON.stringify({
+                              type: "text_chunk",
+                              content: toSend,
+                            })}\n\n`,
+                          ),
+                        )
+                        isFirstChunk = false
+                      }
+                    }
+
+                    if (part.functionCall) {
+                      // Send any remaining text first
+                      if (textBuffer.trim()) {
+                        controller.enqueue(
+                          encoder.encode(
+                            `data: ${JSON.stringify({
+                              type: "text_chunk",
+                              content: textBuffer,
+                            })}\n\n`,
+                          ),
+                        )
+                      }
+
+                      toolCallBuffer += JSON.stringify(part.functionCall)
+
+                      controller.enqueue(
+                        encoder.encode(
+                          `data: ${JSON.stringify({
+                            type: "tool_call",
+                            toolName: part.functionCall.name,
+                            args: part.functionCall.args,
+                          })}\n\n`,
+                        ),
+                      )
+
+                      // Execute the tool
+                      const toolResult = await executeFunctionCall(part.functionCall, walletAddress)
+
+                      controller.enqueue(
+                        encoder.encode(
+                          `data: ${JSON.stringify({
+                            type: "tool_result",
+                            toolName: part.functionCall.name,
+                            result: toolResult,
+                          })}\n\n`,
+                        ),
+                      )
+
+                      toolCallBuffer = ""
+                    }
                   }
                 }
 
-                if (part.functionCall) {
-                  // Send any remaining text first
+                if (event.candidates?.[0]?.finishReason === "STOP") {
                   if (textBuffer.trim()) {
                     controller.enqueue(
                       encoder.encode(
@@ -1094,69 +1302,141 @@ export async function POST(request: Request) {
                         })}\n\n`,
                       ),
                     )
+                    textBuffer = ""
                   }
-
-                  toolCallBuffer += JSON.stringify(part.functionCall)
-
+                  
+                  // Signal completion
                   controller.enqueue(
                     encoder.encode(
                       `data: ${JSON.stringify({
-                        type: "tool_call",
-                        toolName: part.functionCall.name,
-                        args: part.functionCall.args,
+                        type: "done",
                       })}\n\n`,
                     ),
                   )
-
-                  // Execute the tool
-                  const toolResult = await executeFunctionCall(part.functionCall, walletAddress)
-
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({
-                        type: "tool_result",
-                        toolName: part.functionCall.name,
-                        result: toolResult,
-                      })}\n\n`,
-                    ),
-                  )
-
-                  toolCallBuffer = ""
+                  controller.close()
                 }
               }
-            }
+            } catch (googleStreamError: any) {
+              // Google stream failed, try Grok fallback if available
+              console.warn("[v0] Google stream error:", googleStreamError.message)
 
-            if (event.candidates?.[0]?.finishReason === "STOP") {
-              if (textBuffer.trim()) {
+              if (grokApiKey) {
+                try {
+                  console.log("[v0] Google stream failed. Falling back to Grok...")
+                  
+                  const response = await fetch("https://api.x.ai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${grokApiKey}`,
+                    },
+                    body: JSON.stringify({
+                      model: "grok-4-latest",
+                      messages: [
+                        { role: "system", content: systemPrompt },
+                        ...messages.map((msg: any) => ({
+                          role: msg.role,
+                          content: msg.content,
+                        })),
+                      ],
+                      temperature: 0.7,
+                      top_p: 0.95,
+                      max_tokens: 1024,
+                      stream: true,
+                    }),
+                  })
+
+                  if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(`Grok API error: ${response.status} - ${JSON.stringify(errorData)}`)
+                  }
+
+                  console.log("[v0] Grok fallback succeeded, streaming response")
+                  const reader = response.body?.getReader()
+                  const decoder = new TextDecoder()
+
+                  if (reader) {
+                    let buffer = ""
+                    while (true) {
+                      const { done, value } = await reader.read()
+                      if (done) break
+
+                      buffer += decoder.decode(value, { stream: true })
+                      const lines = buffer.split("\n")
+                      buffer = lines.pop() || ""
+
+                      for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                          const data = line.slice(6)
+                          if (data === "[DONE]") continue
+
+                          try {
+                            const parsed = JSON.parse(data)
+                            const content = parsed.choices?.[0]?.delta?.content
+                            if (content) {
+                              controller.enqueue(
+                                encoder.encode(
+                                  `data: ${JSON.stringify({
+                                    type: "text_chunk",
+                                    content: content,
+                                  })}\n\n`,
+                                ),
+                              )
+                            }
+                          } catch (e) {
+                            // Skip parsing errors for individual chunks
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  // Signal completion
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        type: "done",
+                      })}\n\n`,
+                    ),
+                  )
+                  controller.close()
+                } catch (grokFallbackError: any) {
+                  console.error("[v0] Grok fallback also failed:", grokFallbackError)
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        type: "error",
+                        error: "Both Google and Grok AI failed. Please try again later.",
+                      })}\n\n`,
+                    ),
+                  )
+                  controller.close()
+                  return
+                }
+              } else {
                 controller.enqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({
-                      type: "text_chunk",
-                      content: textBuffer,
+                      type: "error",
+                      error: googleStreamError.message || "Google AI failed and no fallback available",
                     })}\n\n`,
                   ),
                 )
+                controller.close()
+                return
               }
             }
           }
-
+        } catch (error: any) {
+          console.error("[v0] Agent error:", error)
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
-                type: "done",
+                type: "error",
+                error: error?.message || "Failed to get response",
               })}\n\n`,
             ),
           )
-        } catch (error) {
-          console.error("[v0] Stream error:", error)
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                error: error instanceof Error ? error.message : "Unknown error",
-              })}\n\n`,
-            ),
-          )
-        } finally {
           controller.close()
         }
       },

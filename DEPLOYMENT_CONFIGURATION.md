@@ -23,8 +23,11 @@ HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_API_KEY
 # REQUIRED: Solana Network
 NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
 
-# OPTIONAL: Google Gemini API for AI Copilot
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key
+# OPTIONAL: Google Gemini API for AI Copilot (Primary)
+GOOGLE_API_KEY=your_google_gemini_api_key
+
+# OPTIONAL: Grok AI API for AI Copilot (Fallback if Google not available)
+XAI_API_KEY=your_xai_grok_api_key
 
 # OPTIONAL: Jupiter API Key (recommended for better rate limits)
 JUPITER_API_KEY=your_jupiter_api_key
@@ -110,9 +113,10 @@ JUPITER_API_KEY=your_jupiter_api_key
 ### AI Copilot Not Working
 
 **Checklist**:
-- [ ] `GOOGLE_GENERATIVE_AI_API_KEY` is set
-- [ ] The API key is valid
-- [ ] You haven't exceeded the free tier quota (60 requests/min)
+- [ ] At least one AI provider is configured: `GOOGLE_API_KEY` (primary) or `XAI_API_KEY` (fallback)
+- [ ] The API keys are valid
+- [ ] For Google: You haven't exceeded the free tier quota (60 requests/min)
+- [ ] For Grok: XAI account has sufficient credits
 
 ## Local Development
 
@@ -124,7 +128,8 @@ cp .env.example .env.local
 
 # Edit .env.local and add your keys
 HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
-GOOGLE_GENERATIVE_AI_API_KEY=your_key
+GOOGLE_API_KEY=your_google_key
+XAI_API_KEY=your_xai_key
 JUPITER_API_KEY=your_key
 \`\`\`
 
@@ -150,7 +155,8 @@ JUPITER_API_KEY=your_key
 |----------|----------|---------|-------------------|
 | `HELIUS_RPC_URL` | ✅ Yes | Solana RPC endpoint | ❌ No (server-only) |
 | `NEXT_PUBLIC_SOLANA_NETWORK` | ✅ Yes | Network selection | ✅ Yes (safe) |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | ⚠️ Optional | AI Copilot | ❌ No (server-only) |
+| `GOOGLE_API_KEY` | ⚠️ Optional | Google Gemini AI Copilot (Primary) | ❌ No (server-only) |
+| `XAI_API_KEY` | ⚠️ Optional | Grok AI Copilot (Fallback) | ❌ No (server-only) |
 | `JUPITER_API_KEY` | ⚠️ Optional | Jupiter API access | ❌ No (server-only) |
 
 ## Production Checklist

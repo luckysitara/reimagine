@@ -44,7 +44,7 @@ const INITIAL_WELCOME = {
   id: "welcome",
   role: "assistant" as const,
   content:
-    "Hello! I'm your AI DeFi assistant. I can help you swap tokens, create limit/DCA orders, launch new tokens, analyze your portfolio, monitor news, and more. What would you like to do?",
+    "Hello! I'm your AI DeFi assistant. I can help you swap tokens, create limit orders, set up DCA strategies, launch new SPL tokens, analyze your portfolio with technical & sentiment indicators, and monitor token news. Connect your wallet to get started!",
 }
 
 export function SolanaCopilot() {
@@ -121,10 +121,30 @@ export function SolanaCopilot() {
           setWalletBalance(0)
           return
         }
-        const balanceLamports = await secureRPCClient.getBalance(publicKey.toBase58())
-        const balanceSOL = Number(balanceLamports) / LAMPORTS_PER_SOL
+        const result = await secureRPCClient.getBalance(publicKey.toBase58())
+        
+        // Handle different response formats from RPC
+        let balanceLamports: number
+        if (typeof result === "object" && result !== null && "value" in result) {
+          // Handle object response with value property
+          balanceLamports = Number(result.value)
+        } else if (typeof result === "string") {
+          // Handle string response
+          balanceLamports = Number.parseInt(result, 10)
+        } else {
+          // Handle direct number response
+          balanceLamports = Number(result)
+        }
+        
+        if (Number.isNaN(balanceLamports)) {
+          console.warn("[v0] Invalid balance format received:", result)
+          setWalletBalance(0)
+          return
+        }
+        
+        const balanceSOL = balanceLamports / LAMPORTS_PER_SOL
         console.log("[v0] Fetched wallet balance:", balanceSOL, "SOL from", balanceLamports, "lamports")
-        setWalletBalance(Number.isNaN(balanceSOL) ? 0 : balanceSOL)
+        setWalletBalance(balanceSOL)
       } catch (error) {
         console.error("[v0] Failed to fetch balance:", error)
         setWalletBalance(0)
@@ -298,11 +318,6 @@ export function SolanaCopilot() {
 
     if (!input.trim() || isLoading) return
 
-    if (!publicKey) {
-      setError("Please connect your wallet to use the copilot")
-      return
-    }
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -377,8 +392,9 @@ export function SolanaCopilot() {
 
         let buffer = ""
         let hasReceivedData = false
+        let isComplete = false
 
-        while (true) {
+        while (!isComplete) {
           try {
             const { done, value } = await reader.read()
 
@@ -395,6 +411,8 @@ export function SolanaCopilot() {
             buffer = lines.pop() || ""
 
             for (const line of lines) {
+              if (!line.trim()) continue
+              
               if (line.startsWith("data: ")) {
                 try {
                   const data = JSON.parse(line.slice(6))
@@ -402,6 +420,7 @@ export function SolanaCopilot() {
                   if (data.error) {
                     setError(data.error)
                     console.error("[v0] Error from stream:", data.error)
+                    isComplete = true
                     break
                   }
 
@@ -442,6 +461,7 @@ export function SolanaCopilot() {
                     })
                   } else if (data.type === "done") {
                     console.log("[v0] Response complete")
+                    isComplete = true
                   }
                 } catch (parseError) {
                   console.error("[v0] Failed to parse stream data:", parseError)
