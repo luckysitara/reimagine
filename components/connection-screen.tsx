@@ -1,6 +1,7 @@
 "use client"
 
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Sparkles, ArrowRight, Lock, Zap, BarChart3 } from "lucide-react"
 
@@ -38,8 +39,14 @@ export function ConnectionScreen() {
         {/* Logo and branding */}
         <div className="space-y-4">
           <div className="flex justify-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
-              <Sparkles className="h-7 w-7 text-primary-foreground" />
+            <div className="relative h-24 w-24 overflow-hidden rounded-2xl shadow-xl">
+              <Image
+                src="/reimagine-icon.jpeg"
+                alt="Reimagine Logo"
+                fill
+                className="object-cover"
+                priority
+              />
             </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-foreground">Reimagine DeFi</h1>

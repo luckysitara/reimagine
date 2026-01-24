@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Reimagine Banner](./public/digital-art-collection.png)
+![Reimagine Banner](./public/reimagine-banner.jpg)
 
 **The Future of DeFi Trading - Powered by AI**
 
