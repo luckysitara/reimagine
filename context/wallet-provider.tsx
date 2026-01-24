@@ -28,8 +28,12 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter(), new BackpackWalletAdapter()],
-    [],
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter({ network }),
+      new BackpackWalletAdapter(),
+    ],
+    [network],
   )
 
   const onError = (error: any) => {
