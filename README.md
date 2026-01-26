@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Reimagine Banner](./public/reimagine-banner.jpg)
+![Reimagine Banner](./public/digital-art-collection.png)
 
 **The Future of DeFi Trading - Powered by AI**
 
@@ -466,7 +466,7 @@ HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_API_KEY
 # =============================================================================
 # GOOGLE GEMINI AI (REQUIRED)
 # =============================================================================
-GOOGLE_API_KEY=your_google_gemini_api_key_here
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_api_key_here
 
 # =============================================================================
 # JUPITER API (OPTIONAL)
@@ -570,7 +570,7 @@ HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=abc123def456...
 # Step 3: Create new API key
 # Step 4: Copy and add to .env.local
 
-GOOGLE_API_KEY=your_key_here
+GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
 ```
 
 **Free Tier Details**:

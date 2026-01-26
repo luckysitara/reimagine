@@ -276,7 +276,7 @@ const tools = [
   },
 ]
 
-async function executeFunctionCall(functionCall: any, walletAddress?: string, baseUrl?: string) {
+async function executeFunctionCall(functionCall: any, walletAddress?: string) {
   const { name, args } = functionCall
 
   console.log(`[v0] Executing function: ${name}`, args)
@@ -661,8 +661,7 @@ async function executeFunctionCall(functionCall: any, walletAddress?: string, ba
             walletAddress,
           })
 
-          const apiUrl = baseUrl ? `${baseUrl}/api/token/create` : "http://localhost:3000/api/token/create"
-          const response = await fetch(apiUrl, {
+          const response = await fetch("/api/token/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -869,7 +868,7 @@ async function executeAgentWithStream(
   messages: any[],
   walletAddress: string | undefined,
 ): Promise<ReadableStream<Uint8Array> | null> {
-  const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ""
+  const googleApiKey = process.env.GOOGLE_API_KEY || ""
   const grokApiKey = process.env.XAI_API_KEY || ""
 
   if (!googleApiKey && !grokApiKey) {
@@ -1029,14 +1028,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ""
+    const googleApiKey = process.env.GOOGLE_API_KEY || ""
     const grokApiKey = process.env.XAI_API_KEY || ""
-
-    // Debug log for API keys
-    console.log("[v0] API Keys check:", {
-      google: googleApiKey ? "Set (Hidden)" : "Missing",
-      grok: grokApiKey ? "Set (Hidden)" : "Missing"
-    })
 
     if (!googleApiKey && !grokApiKey) {
       console.error("[v0] No AI providers configured. Set GOOGLE_API_KEY (Google/default) or XAI_API_KEY (Grok/fallback).")
@@ -1049,9 +1042,6 @@ export async function POST(request: Request) {
     }
 
     const encoder = new TextEncoder()
-    const url = new URL(request.url)
-    const baseUrl = url.origin
-
     const lastMessageId = Date.now().toString()
 
     // Function to try Google API with automatic Grok fallback
@@ -1285,7 +1275,7 @@ export async function POST(request: Request) {
                       )
 
                       // Execute the tool
-                      const toolResult = await executeFunctionCall(part.functionCall, walletAddress, baseUrl)
+                      const toolResult = await executeFunctionCall(part.functionCall, walletAddress)
 
                       controller.enqueue(
                         encoder.encode(

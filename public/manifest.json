@@ -1,26 +1,24 @@
 {
-  "name": "Reimagine DeFi",
+  "name": "Reimagine - AI-Powered DeFi Trading",
   "short_name": "Reimagine",
-  "description": "AI-Powered DeFi Trading Platform on Solana",
+  "description": "AI-powered DeFi trading on Solana — trade, stake, and manage assets with intelligent automation.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "scope": "/",
+  "background_color": "#0b1220",
+  "theme_color": "#0066cc",
   "icons": [
     {
-      "src": "/reimagine-icon.jpeg",
+      "src": "/icons/icon-192.svg",
       "sizes": "192x192",
-      "type": "image/jpeg"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/reimagine-logo.jpeg",
+      "src": "/icons/icon-512.svg",
       "sizes": "512x512",
-      "type": "image/jpeg"
-    },
-    {
-      "src": "/reimagine-icon.jpeg",
-      "sizes": "any",
-      "type": "image/jpeg"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
