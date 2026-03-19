@@ -750,7 +750,7 @@ export function SolanaCopilot() {
   }
 
   return (
-    <Card className="flex flex-col h-full rounded-lg border border-border bg-background overflow-hidden">
+    <Card className="flex flex-col min-h-[600px] h-[calc(100vh-180px)] rounded-lg border border-border bg-background overflow-hidden">
       <CardHeader className="flex-shrink-0 border-b border-border px-3 md:px-4 py-2 md:py-3">
         <div className="flex items-center justify-between gap-2 md:gap-4">
           <div className="flex-1 min-w-0">
@@ -771,108 +771,111 @@ export function SolanaCopilot() {
         </div>
       </CardHeader>
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <div ref={scrollContainerRef} className="flex-1 w-full overflow-y-auto overflow-x-hidden">
-          <div className="space-y-2 md:space-y-3 px-2 md:px-4 py-3">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center py-6 md:py-12 min-h-[250px] md:min-h-[300px]">
-                <div className="mb-3 md:mb-4">
-                  <div className="h-10 w-10 md:h-16 md:w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                    <Sparkles className="h-5 w-5 md:h-8 md:w-8 text-primary" />
+      <div ref={scrollContainerRef} className="flex-1 w-full overflow-y-auto overflow-x-hidden">
+        <div className="space-y-2 md:space-y-3 px-2 md:px-4 py-3">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center py-6 md:py-12 min-h-[250px] md:min-h-[300px]">
+              <div className="mb-3 md:mb-4">
+                <div className="h-10 w-10 md:h-16 md:w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <Sparkles className="h-5 w-5 md:h-8 md:w-8 text-primary" />
+                </div>
+              </div>
+              <p className="text-sm md:text-base font-semibold text-foreground">Start Trading</p>
+              <p className="text-xs text-muted-foreground mt-2 px-3 max-w-xs">
+                Ask me to swap tokens, create orders, or analyze your portfolio
+              </p>
+            </div>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`px-2 md:px-4 py-2 md:py-3 rounded-lg text-xs md:text-sm flex-shrink-0 max-w-[90%] sm:max-w-[80%] md:max-w-[70%] ${
+                      message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                    }`}
+                  >
+                    <p className="break-words whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                    {message.toolCalls && message.toolCalls.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {message.toolCalls.map((tool, idx) => (
+                          <div key={idx}>{renderToolResult(tool, idx)}</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <p className="text-sm md:text-base font-semibold text-foreground">Start Trading</p>
-                <p className="text-xs text-muted-foreground mt-2 px-3 max-w-xs">
-                  Ask me to swap tokens, create orders, or analyze your portfolio
-                </p>
+              ))}
+            </>
+          )}
+
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="px-3 md:px-4 py-2 md:py-3 rounded-lg bg-muted text-foreground">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 bg-muted-foreground rounded-full animate-pulse" />
+                  <span className="text-xs md:text-sm">Thinking...</span>
+                </div>
               </div>
-            ) : (
-              <>
-                {messages.map((message) => (
-                  <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`px-2 md:px-4 py-2 md:py-3 rounded-lg text-xs md:text-sm flex-shrink-0 max-w-[90%] sm:max-w-[80%] md:max-w-[70%] ${
-                        message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                      }`}
-                    >
-                      <p className="break-words whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                      {message.toolCalls && message.toolCalls.length > 0 && (
-                        <div className="mt-2 space-y-2">
-                          {message.toolCalls.map((tool, idx) => (
-                            <div key={idx}>{renderToolResult(tool, idx)}</div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+            </div>
+          )}
+
+          {messages.length > 0 && !isLoading && (
+            <div className="mt-4 pt-3 border-t border-border">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Try asking:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {EXAMPLE_PROMPTS.map((prompt, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setInput(prompt)
+                      const event = new KeyboardEvent("keydown", { key: "Enter" })
+                      setTimeout(() => handleSubmit(event as any), 0)
+                    }}
+                    className="p-2 text-left text-xs rounded-md border border-border hover:bg-muted transition-colors"
+                  >
+                    {prompt}
+                  </button>
                 ))}
-              </>
-            )}
-
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="px-3 md:px-4 py-2 md:py-3 rounded-lg bg-muted text-foreground">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 bg-muted-foreground rounded-full animate-pulse" />
-                    <span className="text-xs md:text-sm">Thinking...</span>
-                  </div>
-                </div>
               </div>
-            )}
+            </div>
+          )}
+        </div>
+      </div>
 
-            {messages.length > 0 && !isLoading && (
-              <div className="mt-4 pt-3 border-t border-border">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Try asking:</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {EXAMPLE_PROMPTS.map((prompt, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setInput(prompt)
-                        const event = new KeyboardEvent("keydown", { key: "Enter" })
-                        setTimeout(() => handleSubmit(event as any), 0)
-                      }}
-                      className="p-2 text-left text-xs rounded-md border border-border hover:bg-muted transition-colors"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+      {error && (
+        <div className="flex-shrink-0 border-t border-border bg-red-500/10 p-2 md:p-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs md:text-sm text-red-700 dark:text-red-400">{error}</p>
           </div>
         </div>
+      )}
 
-        {error && (
-          <div className="flex-shrink-0 border-t border-border bg-red-500/10 p-2 md:p-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs md:text-sm text-red-700 dark:text-red-400">{error}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex-shrink-0 border-t border-border bg-background p-2 md:p-3">
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value)
-                setError(null)
-              }}
-              placeholder={isMobile ? "Ask..." : "Ask me to swap tokens, create orders..."}
-              className="flex-1 text-xs md:text-sm h-8 md:h-9"
-              disabled={isLoading || !publicKey}
-            />
-            <Button
-              onClick={(e) => handleSubmit(e as any)}
-              disabled={isLoading || !publicKey || !input.trim()}
-              size="sm"
-              className="flex-shrink-0"
-            >
-              <Send className="h-3 w-3 md:h-4 md:w-4" />
-            </Button>
-          </div>
+      <div className="flex-shrink-0 border-t border-border bg-background p-2 md:p-3">
+        <div className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value)
+              setError(null)
+            }}
+            placeholder={
+              !publicKey 
+                ? "Connect wallet to chat..." 
+                : (isMobile ? "Ask..." : "Ask me to swap tokens, create orders...")
+            }
+            className="flex-1 text-xs md:text-sm h-8 md:h-9"
+            disabled={isLoading}
+            autoFocus
+          />
+          <Button
+            onClick={(e) => handleSubmit(e as any)}
+            disabled={isLoading || !publicKey || !input.trim()}
+            size="sm"
+            className="flex-shrink-0"
+          >
+            <Send className="h-3 w-3 md:h-4 md:w-4" />
+          </Button>
         </div>
       </div>
     </Card>

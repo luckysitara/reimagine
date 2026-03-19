@@ -47,7 +47,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url)
 
   // Treat navigation requests as app-shell
-  if (request.mode === "navigate" || APP_SHELL.some((p) => request.url.includes(p.replace("*", "")))) {
+  if (request.mode === "navigate" || APP_SHELL.some((p) => p !== "/" && url.pathname === p)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached
@@ -58,7 +58,10 @@ self.addEventListener("fetch", (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, resClone))
             return res
           })
-          .catch(() => caches.match("/")) // fallback to index if offline
+          .catch(async () => {
+            const root = await caches.match("/")
+            return root || new Response("Offline", { status: 503, statusText: "Service Unavailable" })
+          })
       }),
     )
     return
@@ -67,10 +70,12 @@ self.addEventListener("fetch", (event) => {
   // Default: network-first, fallback to cache
   event.respondWith(
     fetch(request)
-      .then((res) => {
-        return res
-      })
-      .catch(() => caches.match(request)),
+      .catch(async () => {
+        const cached = await caches.match(request)
+        if (cached) return cached
+        // If both network and cache fail, return a 404 Response to avoid SW 'undefined' error
+        return new Response("Not found", { status: 404, statusText: "Not Found" })
+      }),
   )
 })
 

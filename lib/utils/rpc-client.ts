@@ -86,8 +86,13 @@ export class SecureRPCClient {
   async getBalance(address: string): Promise<number> {
     try {
       const result = await this.request("getBalance", [address])
+      // The result can be a number (lamports) or an object { context: { ... }, value: number }
+      const lamports = (typeof result === "object" && result !== null && "value" in result)
+        ? result.value
+        : result
+
       // Ensure we return a number, not a string or undefined
-      const balance = typeof result === "string" ? Number.parseInt(result, 10) : Number(result)
+      const balance = typeof lamports === "string" ? Number.parseInt(lamports, 10) : Number(lamports)
       if (Number.isNaN(balance)) {
         console.warn("[v0] Invalid balance returned:", result, "for address:", address)
         return 0
@@ -110,7 +115,8 @@ export class SecureRPCClient {
    * Get account info
    */
   async getAccountInfo(address: string): Promise<any> {
-    return this.request("getAccountInfo", [address, { encoding: "jsonParsed" }])
+    const result = await this.request("getAccountInfo", [address, { encoding: "jsonParsed" }])
+    return result && typeof result === "object" && "value" in result ? result.value : result
   }
 
   /**
@@ -133,15 +139,40 @@ export class SecureRPCClient {
   /**
    * Confirm transaction
    */
-  async confirmTransaction(signature: string): Promise<any> {
-    return this.request("confirmTransaction", [signature, "confirmed"])
+  async confirmTransaction(
+    strategy: string | { signature: string; blockhash: string; lastValidBlockHeight: number },
+  ): Promise<any> {
+    const signature = typeof strategy === "string" ? strategy : strategy.signature
+    
+    // Poll for confirmation since there's no direct RPC 'confirmTransaction'
+    let status = null
+    const start = Date.now()
+    const timeout = 60000 // 60 seconds
+
+    while (Date.now() - start < timeout) {
+      const result = await this.request("getSignatureStatuses", [[signature], { searchTransactionHistory: true }])
+      status = result && result.value ? result.value[0] : null
+
+      if (status && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
+        return status
+      }
+      
+      if (status && status.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`)
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+
+    throw new Error("Transaction confirmation timeout")
   }
 
   /**
    * Get latest blockhash
    */
   async getLatestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
-    return this.request("getLatestBlockhash", [{ commitment: "finalized" }])
+    const result = await this.request("getLatestBlockhash", [{ commitment: "finalized" }])
+    return result && typeof result === "object" && "value" in result ? result.value : result
   }
 
   /**
